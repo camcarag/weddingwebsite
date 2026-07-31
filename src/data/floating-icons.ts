@@ -11,9 +11,6 @@ export type FloatingIconData = {
   blurb: string;
   size: 0 | 1 | 2 | 3;
   special?: boolean;
-  date?: string;
-  location?: string;
-  cta?: string;
 };
 
 export const floatingIcons: FloatingIconData[] = [
@@ -44,9 +41,9 @@ export const floatingIcons: FloatingIconData[] = [
   {
     id: "hotpot",
     file: "hotpot.png",
-    alt: "Hot pot dinner",
-    title: "We love hot pot!",
-    blurb: "Our second date was at a hot pot restaurant, which turned out to be the first of many.",
+    alt: "Hotpot dinner",
+    title: "We love hotpot!",
+    blurb: "Our second date was at a hotpot restaurant, which turned out to be the first of many.",
     size: 3,
   },
   {
@@ -65,9 +62,6 @@ export const floatingIcons: FloatingIconData[] = [
     blurb: "Pack your bags: we're tying the knot.",
     size: 3,
     special: true,
-    date: "Month DD, YYYY",
-    location: "City, State",
-    cta: "Formal invitation to follow",
   },
   {
     id: "yoga-mat",
@@ -102,11 +96,11 @@ export const floatingIcons: FloatingIconData[] = [
     size: 1,
   },
   {
-    id: "bikini",
-    file: "bikini.png",
-    alt: "Yellow bikini",
-    title: "Warm-weather optimism",
-    blurb: "Packed for every trip regardless of forecast. It's a mindset.",
+    id: "poster",
+    file: "poster.png",
+    alt: "Ted Lasso BELIEVE poster",
+    title: "Believe",
+    blurb: "One of the first shows we watched together was Ted Lasso. Many people say Jon is the Asian Ted Lasso.",
     size: 2,
   },
   {

@@ -354,6 +354,43 @@ function FloatingFlowers() {
 
 const REVEAL_TRANSITION_MS = 300;
 
+// All-day event: iCal/Google both expect an exclusive end date (the day
+// after), even though it only spans the one day.
+const WEDDING_EVENT = {
+  title: "Cam & Jon's Wedding",
+  location: "Shangri-La Boracay, Boracay Island, Malay, 5608 Aklan, Philippines",
+  startDate: "20271129",
+  endDate: "20271130",
+};
+
+function buildGoogleCalendarUrl() {
+  const params = new URLSearchParams({
+    action: "TEMPLATE",
+    text: WEDDING_EVENT.title,
+    dates: `${WEDDING_EVENT.startDate}/${WEDDING_EVENT.endDate}`,
+    location: WEDDING_EVENT.location,
+  });
+  return `https://calendar.google.com/calendar/render?${params.toString()}`;
+}
+
+function buildIcsDataUrl() {
+  const ics = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//Cam & Jon//Wedding//EN",
+    "BEGIN:VEVENT",
+    "UID:cam-and-jon-wedding@camnjon",
+    "DTSTAMP:20260101T000000Z",
+    `DTSTART;VALUE=DATE:${WEDDING_EVENT.startDate}`,
+    `DTEND;VALUE=DATE:${WEDDING_EVENT.endDate}`,
+    `SUMMARY:${WEDDING_EVENT.title}`,
+    `LOCATION:${WEDDING_EVENT.location}`,
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ].join("\r\n");
+  return `data:text/calendar;charset=utf-8,${encodeURIComponent(ics)}`;
+}
+
 function SpecialReveal({ icon, onClose }: { icon: FloatingIconData; onClose: () => void }) {
   const [visible, setVisible] = useState(false);
   const closingRef = useRef(false);
@@ -433,6 +470,23 @@ function SpecialReveal({ icon, onClose }: { icon: FloatingIconData; onClose: () 
               <path strokeLinecap="round" d="M6 6l12 12M18 6L6 18" />
             </svg>
           </button>
+        </div>
+        <div className="mt-4 flex justify-center gap-3 text-xs">
+          <a
+            href={buildGoogleCalendarUrl()}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-full bg-[#204C32] px-3 py-1.5 font-medium text-white shadow-sm transition-colors hover:bg-[#183a26]"
+          >
+            Add to Google Calendar
+          </a>
+          <a
+            href={buildIcsDataUrl()}
+            download="cam-and-jon-wedding.ics"
+            className="rounded-full bg-[#204C32] px-3 py-1.5 font-medium text-white shadow-sm transition-colors hover:bg-[#183a26]"
+          >
+            Apple / Outlook (.ics)
+          </a>
         </div>
       </div>
     </div>
