@@ -172,7 +172,6 @@ function IconItem({
   isActive,
   onActivate,
   onDeactivate,
-  onToggle,
   reduceMotion,
 }: {
   icon: FloatingIconData;
@@ -180,7 +179,6 @@ function IconItem({
   isActive: boolean;
   onActivate: () => void;
   onDeactivate: () => void;
-  onToggle: () => void;
   reduceMotion: boolean;
 }) {
   const floatRef = useRef<HTMLDivElement>(null);
@@ -271,7 +269,11 @@ function IconItem({
             onMouseLeave={onDeactivate}
             onFocus={icon.special ? triggerSpecialReveal : onActivate}
             onBlur={onDeactivate}
-            onClick={icon.special ? triggerSpecialReveal : onToggle}
+            // Tapping on mobile synthesizes mouseover (which activates via
+            // onActivate) immediately followed by click — wiring this to a
+            // toggle would see it as "already active" and instantly close
+            // it again. Always activating keeps a tap idempotent.
+            onClick={icon.special ? triggerSpecialReveal : onActivate}
             className={`${sizeClasses[icon.size]} cursor-pointer rounded-full transition-transform duration-300 ease-out hover:scale-110 focus:scale-110 focus:outline-none`}
           >
             <IconGlyph file={icon.file} alt={icon.alt} />
@@ -492,7 +494,6 @@ export default function FloatingIcons() {
           onDeactivate={() =>
             setActiveId((current) => (current === icon.id && !icon.special ? null : current))
           }
-          onToggle={() => setActiveId((current) => (current === icon.id ? null : icon.id))}
           reduceMotion={reduceMotion}
         />
       ))}
