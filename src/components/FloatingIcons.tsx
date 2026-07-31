@@ -362,13 +362,29 @@ function SpecialReveal({ icon, onClose }: { icon: FloatingIconData; onClose: () 
     // browser actually has something to transition from.
     const id = requestAnimationFrame(() => setVisible(true));
     const audioEl = audioRef.current;
-    // Autoplay-with-sound is only reliably allowed off a real user gesture
-    // (a click) — a pure hover may get silently blocked by the browser, so
-    // this failing is expected in some cases and not worth surfacing.
-    audioEl?.play().catch(() => {});
+
+    // Autoplay-with-sound is only reliably allowed off a real gesture
+    // (click/tap/key) — a hover alone doesn't qualify, so if this is the
+    // very first interaction with the page, the browser silently blocks
+    // it. Rather than stay silent for the rest of the session, retry once
+    // on the next real gesture anywhere on the page.
+    let retryCleanup: (() => void) | undefined;
+    audioEl?.play().catch(() => {
+      const retry = () => {
+        audioEl.play().catch(() => {});
+      };
+      document.addEventListener("pointerdown", retry, { once: true });
+      document.addEventListener("keydown", retry, { once: true });
+      retryCleanup = () => {
+        document.removeEventListener("pointerdown", retry);
+        document.removeEventListener("keydown", retry);
+      };
+    });
+
     return () => {
       cancelAnimationFrame(id);
       audioEl?.pause();
+      retryCleanup?.();
     };
   }, []);
 
