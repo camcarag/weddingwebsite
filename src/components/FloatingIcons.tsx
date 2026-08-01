@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Bricolage_Grotesque } from "next/font/google";
 import { gsap } from "@/lib/gsap";
 import { floatingIcons, type FloatingIconData } from "@/data/floating-icons";
@@ -64,8 +64,8 @@ const sizeClasses = [
 
 // Actual box size (not a CSS transform) so the tooltip, which anchors to
 // this element's real edges via top-full/bottom-full, clears the enlarged
-// video instead of overlapping it.
-const videoSizeClasses = "h-[12rem] w-[12rem] sm:h-[15rem] sm:w-[15rem]";
+// hover media instead of overlapping it.
+const hoverMediaSizeClasses = "h-[12rem] w-[12rem] sm:h-[15rem] sm:w-[15rem]";
 
 function HoverVideo({ src }: { src: string }) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -99,11 +99,13 @@ function IconGlyph({
   file,
   alt,
   hoverVideo,
+  hoverImage,
   playVideo,
 }: {
   file: string;
   alt: string;
   hoverVideo?: string;
+  hoverImage?: string;
   playVideo?: boolean;
 }) {
   const [broken, setBroken] = useState(false);
@@ -138,6 +140,18 @@ function IconGlyph({
     return <HoverVideo src={`/${hoverVideo}`} />;
   }
 
+  if (hoverImage && playVideo) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={`/${hoverImage}`}
+        alt={alt}
+        draggable={false}
+        className="h-full w-full select-none rounded-full object-cover drop-shadow-md"
+      />
+    );
+  }
+
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
@@ -150,18 +164,27 @@ function IconGlyph({
   );
 }
 
-function Tooltip({ icon, placement }: { icon: FloatingIconData; placement: { vertical: "above" | "below"; horizontal: "left" | "center" | "right" } }) {
+function Tooltip({
+  icon,
+  placement,
+  shift,
+}: {
+  icon: FloatingIconData;
+  placement: { vertical: "above" | "below"; horizontal: "left" | "center" | "right" };
+  shift: { x: number; y: number };
+}) {
   const vertical = placement.vertical === "below" ? "top-full mt-3" : "bottom-full mb-3";
-  const horizontal =
-    placement.horizontal === "left"
-      ? "left-0"
-      : placement.horizontal === "right"
-        ? "right-0"
-        : "left-1/2 -translate-x-1/2";
+  const horizontal = placement.horizontal === "left" ? "left-0" : placement.horizontal === "right" ? "right-0" : "left-1/2";
+  // The video-enlarged icon can shift position to stay clear of the stage
+  // edges (see IconItem) — apply the same shift here so the tooltip moves
+  // with it instead of anchoring to the icon's un-shifted position and
+  // running off-screen itself.
+  const baseX = placement.horizontal === "center" ? "-50%" : "0px";
 
   return (
     <div
       role="status"
+      style={{ transform: `translate(calc(${baseX} + ${shift.x}px), ${shift.y}px)` }}
       className={`absolute ${vertical} ${horizontal} z-20 w-56 rounded-2xl border border-neutral-900/10 bg-white p-4 text-center shadow-lg`}
     >
       <p className="mb-1 text-xs uppercase tracking-[0.2em] text-neutral-500">{icon.title}</p>
@@ -220,6 +243,7 @@ function IconItem({
   onActivate,
   onDeactivate,
   reduceMotion,
+  stageRef,
 }: {
   icon: FloatingIconData;
   position: Position;
@@ -227,11 +251,49 @@ function IconItem({
   onActivate: () => void;
   onDeactivate: () => void;
   reduceMotion: boolean;
+  stageRef: React.RefObject<HTMLDivElement | null>;
 }) {
   const floatRef = useRef<HTMLDivElement>(null);
   const tweenRef = useRef<gsap.core.Tween | null>(null);
   const revealingRef = useRef(false);
   const [revealing, setRevealing] = useState(false);
+  const hasHoverMedia = Boolean(icon.hoverVideo || icon.hoverImage);
+  const [hoverSize, setHoverSize] = useState<number | null>(null);
+  const [hoverShift, setHoverShift] = useState({ x: 0, y: 0 });
+
+  // Size the hover-media circle the same everywhere (so e.g. sunglasses
+  // isn't noticeably smaller than the others just for sitting near a
+  // corner), and instead nudge its position toward whichever side has
+  // room — near a screen edge (common on narrow/mobile viewports) a fixed
+  // centered size would get clipped by the stage's overflow-hidden.
+  useLayoutEffect(() => {
+    if (!isActive || !hasHoverMedia) {
+      setHoverSize(null);
+      setHoverShift({ x: 0, y: 0 });
+      return;
+    }
+    const el = floatRef.current;
+    const stage = stageRef.current;
+    if (!el || !stage) return;
+    const iconRect = el.getBoundingClientRect();
+    const stageRect = stage.getBoundingClientRect();
+    const centerX = iconRect.left + iconRect.width / 2 - stageRect.left;
+    const centerY = iconRect.top + iconRect.height / 2 - stageRect.top;
+    const margin = 16;
+    const preferred = window.innerWidth < 640 ? 192 : 240; // 12rem / 15rem
+    const size = Math.max(96, Math.min(preferred, stageRect.width - margin * 2, stageRect.height - margin * 2));
+
+    let shiftX = 0;
+    if (centerX - size / 2 < margin) shiftX = margin - (centerX - size / 2);
+    else if (centerX + size / 2 > stageRect.width - margin) shiftX = stageRect.width - margin - (centerX + size / 2);
+
+    let shiftY = 0;
+    if (centerY - size / 2 < margin) shiftY = margin - (centerY - size / 2);
+    else if (centerY + size / 2 > stageRect.height - margin) shiftY = stageRect.height - margin - (centerY + size / 2);
+
+    setHoverSize(size);
+    setHoverShift({ x: shiftX, y: shiftY });
+  }, [isActive, hasHoverMedia, stageRef]);
 
   useEffect(() => {
     if (reduceMotion || !floatRef.current) return;
@@ -321,14 +383,25 @@ function IconItem({
             // toggle would see it as "already active" and instantly close
             // it again. Always activating keeps a tap idempotent.
             onClick={icon.special ? triggerSpecialReveal : onActivate}
+            style={
+              isActive && hasHoverMedia && hoverSize
+                ? { width: hoverSize, height: hoverSize, transform: `translate(${hoverShift.x}px, ${hoverShift.y}px)` }
+                : undefined
+            }
             className={`${
-              isActive && icon.hoverVideo ? videoSizeClasses : `${sizeClasses[icon.size]} hover:scale-110 focus:scale-110`
+              isActive && hasHoverMedia ? hoverMediaSizeClasses : `${sizeClasses[icon.size]} hover:scale-110 focus:scale-110`
             } cursor-pointer rounded-full transition-all duration-300 ease-out focus:outline-none`}
           >
-            <IconGlyph file={icon.file} alt={icon.alt} hoverVideo={icon.hoverVideo} playVideo={isActive} />
+            <IconGlyph
+              file={icon.file}
+              alt={icon.alt}
+              hoverVideo={icon.hoverVideo}
+              hoverImage={icon.hoverImage}
+              playVideo={isActive}
+            />
           </button>
         </div>
-        {isActive && !icon.special && <Tooltip icon={icon} placement={placement} />}
+        {isActive && !icon.special && <Tooltip icon={icon} placement={placement} shift={hoverShift} />}
         {revealing && <Confetti />}
       </div>
     </div>
@@ -598,6 +671,7 @@ export default function FloatingIcons() {
             setActiveId((current) => (current === icon.id && !icon.special ? null : current))
           }
           reduceMotion={reduceMotion}
+          stageRef={stageRef}
         />
       ))}
 

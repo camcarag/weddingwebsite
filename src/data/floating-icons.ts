@@ -13,6 +13,8 @@ export type FloatingIconData = {
   special?: boolean;
   /** Video (in /public) that plays in place of the icon while hovered/focused. */
   hoverVideo?: string;
+  /** Image (in /public) shown enlarged in place of the icon while hovered/focused. */
+  hoverImage?: string;
 };
 
 export const floatingIcons: FloatingIconData[] = [
@@ -39,6 +41,7 @@ export const floatingIcons: FloatingIconData[] = [
     title: "Croissant connoisseurs",
     blurb: "We love a good croissant. Our favorites are La Cabra and L'Appartement 4F.",
     size: 1,
+    hoverVideo: "croissant.mp4",
   },
   {
     id: "hotpot",
@@ -55,6 +58,7 @@ export const floatingIcons: FloatingIconData[] = [
     title: "First impressions last",
     blurb: "Jon wore basketball shorts to our first date. He still dreams of joining the NBA.",
     size: 2,
+    hoverVideo: "firstdate.mp4",
   },
   {
     id: "suitcase",
@@ -72,6 +76,7 @@ export const floatingIcons: FloatingIconData[] = [
     title: "Saturday yoga",
     blurb: "One thing we look forward to every week is our Saturday yoga. Jon swears he levitates.",
     size: 2,
+    hoverVideo: "yoga.mp4",
   },
   {
     id: "grass",
@@ -80,6 +85,7 @@ export const floatingIcons: FloatingIconData[] = [
     title: "Grounding",
     blurb: "We joke that Jon is Cam's dog. She walks him to the park to touch grass.",
     size: 0,
+    hoverVideo: "grounding.mp4",
   },
   {
     id: "sunglasses",
@@ -112,8 +118,9 @@ export const floatingIcons: FloatingIconData[] = [
     file: "huggy.png",
     alt: "Painting of two figures hugging cheek to cheek",
     title: "Cheek to cheek",
-    blurb: "A painting Cam made of us. We love cheek to cheek and huggy!",
+    blurb: "A painting Cam made of us. We love cheek to cheek and huggy! Jon's painting for comparison:",
     size: 2,
+    hoverImage: "jonpainting-hover.jpg",
   },
   {
     id: "roses",
@@ -122,5 +129,6 @@ export const floatingIcons: FloatingIconData[] = [
     title: "The bouquet",
     blurb: "We got engaged with a big, beautiful bouquet of roses at Jon's parents' home in LA.",
     size: 2,
+    hoverImage: "engagement-hover.jpg",
   },
 ];
