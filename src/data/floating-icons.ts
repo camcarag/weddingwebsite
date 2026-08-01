@@ -11,6 +11,8 @@ export type FloatingIconData = {
   blurb: string;
   size: 0 | 1 | 2 | 3;
   special?: boolean;
+  /** Video (in /public) that plays in place of the icon while hovered/focused. */
+  hoverVideo?: string;
 };
 
 export const floatingIcons: FloatingIconData[] = [
@@ -83,9 +85,10 @@ export const floatingIcons: FloatingIconData[] = [
     id: "sunglasses",
     file: "sunglasses.png",
     alt: "Sunglasses",
-    title: "Vacation mode",
-    blurb: "The second these go on, all group chats become ‘do not disturb.’",
+    title: "Sunshine",
+    blurb: "Jon loved Cam's bright energy on their first date.",
     size: 1,
+    hoverVideo: "sunshine.mp4",
   },
   {
     id: "cap",
@@ -94,6 +97,7 @@ export const floatingIcons: FloatingIconData[] = [
     title: "Whose cap is it anyway?",
     blurb: "We have matching caps and somehow still end up stealing each other's.",
     size: 1,
+    hoverVideo: "cap.mp4",
   },
   {
     id: "poster",
@@ -101,6 +105,14 @@ export const floatingIcons: FloatingIconData[] = [
     alt: "Ted Lasso BELIEVE poster",
     title: "Believe",
     blurb: "One of the first shows we watched together was Ted Lasso. Many people say Jon is the Asian Ted Lasso.",
+    size: 2,
+  },
+  {
+    id: "huggy",
+    file: "huggy.png",
+    alt: "Painting of two figures hugging cheek to cheek",
+    title: "Cheek to cheek",
+    blurb: "A painting Cam made of us. We love cheek to cheek and huggy!",
     size: 2,
   },
   {

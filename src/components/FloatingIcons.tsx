@@ -62,7 +62,50 @@ const sizeClasses = [
   "h-[7.5rem] w-[7.5rem] sm:h-[8.5rem] sm:w-[8.5rem]",
 ];
 
-function IconGlyph({ file, alt }: { file: string; alt: string }) {
+// Actual box size (not a CSS transform) so the tooltip, which anchors to
+// this element's real edges via top-full/bottom-full, clears the enlarged
+// video instead of overlapping it.
+const videoSizeClasses = "h-[12rem] w-[12rem] sm:h-[15rem] sm:w-[15rem]";
+
+function HoverVideo({ src }: { src: string }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el) return;
+    // Try with sound first — browsers allow unmuted autoplay once the user
+    // has interacted with the page at all (not necessarily this element),
+    // so this succeeds for most hovers after the first click anywhere on
+    // the site. Fall back to muted so the video still plays visually on a
+    // cold first hover.
+    el.play().catch(() => {
+      el.muted = true;
+      el.play().catch(() => {});
+    });
+  }, []);
+
+  return (
+    <video
+      ref={videoRef}
+      src={src}
+      loop
+      playsInline
+      className="h-full w-full select-none rounded-full object-cover drop-shadow-md"
+    />
+  );
+}
+
+function IconGlyph({
+  file,
+  alt,
+  hoverVideo,
+  playVideo,
+}: {
+  file: string;
+  alt: string;
+  hoverVideo?: string;
+  playVideo?: boolean;
+}) {
   const [broken, setBroken] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
 
@@ -89,6 +132,10 @@ function IconGlyph({ file, alt }: { file: string; alt: string }) {
         </span>
       </div>
     );
+  }
+
+  if (hoverVideo && playVideo) {
+    return <HoverVideo src={`/${hoverVideo}`} />;
   }
 
   return (
@@ -274,9 +321,11 @@ function IconItem({
             // toggle would see it as "already active" and instantly close
             // it again. Always activating keeps a tap idempotent.
             onClick={icon.special ? triggerSpecialReveal : onActivate}
-            className={`${sizeClasses[icon.size]} cursor-pointer rounded-full transition-transform duration-300 ease-out hover:scale-110 focus:scale-110 focus:outline-none`}
+            className={`${
+              isActive && icon.hoverVideo ? videoSizeClasses : `${sizeClasses[icon.size]} hover:scale-110 focus:scale-110`
+            } cursor-pointer rounded-full transition-all duration-300 ease-out focus:outline-none`}
           >
-            <IconGlyph file={icon.file} alt={icon.alt} />
+            <IconGlyph file={icon.file} alt={icon.alt} hoverVideo={icon.hoverVideo} playVideo={isActive} />
           </button>
         </div>
         {isActive && !icon.special && <Tooltip icon={icon} placement={placement} />}
