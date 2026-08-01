@@ -15,6 +15,8 @@ export type FloatingIconData = {
   hoverVideo?: string;
   /** Image (in /public) shown enlarged in place of the icon while hovered/focused. */
   hoverImage?: string;
+  /** While hovered/focused, pulse the other icons to hoverVideo's beat and light up the screen with disco colors. */
+  discoOnHover?: boolean;
 };
 
 export const floatingIcons: FloatingIconData[] = [
@@ -95,6 +97,7 @@ export const floatingIcons: FloatingIconData[] = [
     blurb: "Jon loved Cam's bright energy on their first date.",
     size: 1,
     hoverVideo: "sunshine.mp4",
+    discoOnHover: true,
   },
   {
     id: "cap",

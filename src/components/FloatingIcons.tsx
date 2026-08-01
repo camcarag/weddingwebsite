@@ -67,7 +67,7 @@ const sizeClasses = [
 // hover media instead of overlapping it.
 const hoverMediaSizeClasses = "h-[12rem] w-[12rem] sm:h-[15rem] sm:w-[15rem]";
 
-function HoverVideo({ src }: { src: string }) {
+function HoverVideo({ src, discoAudio }: { src: string; discoAudio?: boolean }) {
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
@@ -90,6 +90,9 @@ function HoverVideo({ src }: { src: string }) {
       src={src}
       loop
       playsInline
+      // Lets DiscoConductor find this element to tap its audio for
+      // beat-driven pulsing — see discoOnHover on FloatingIconData.
+      data-disco-audio={discoAudio ? "true" : undefined}
       className="h-full w-full select-none rounded-full object-cover drop-shadow-md"
     />
   );
@@ -101,12 +104,14 @@ function IconGlyph({
   hoverVideo,
   hoverImage,
   playVideo,
+  discoAudio,
 }: {
   file: string;
   alt: string;
   hoverVideo?: string;
   hoverImage?: string;
   playVideo?: boolean;
+  discoAudio?: boolean;
 }) {
   const [broken, setBroken] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
@@ -137,7 +142,7 @@ function IconGlyph({
   }
 
   if (hoverVideo && playVideo) {
-    return <HoverVideo src={`/${hoverVideo}`} />;
+    return <HoverVideo src={`/${hoverVideo}`} discoAudio={discoAudio} />;
   }
 
   if (hoverImage && playVideo) {
@@ -267,11 +272,11 @@ function IconItem({
   // room — near a screen edge (common on narrow/mobile viewports) a fixed
   // centered size would get clipped by the stage's overflow-hidden.
   useLayoutEffect(() => {
-    if (!isActive || !hasHoverMedia) {
-      setHoverSize(null);
-      setHoverShift({ x: 0, y: 0 });
-      return;
-    }
+    // No cleanup-to-null needed on deactivation: the render below only
+    // reads hoverSize/hoverShift while isActive && hasHoverMedia, so a
+    // stale value sitting unused between hovers is harmless, and this
+    // effect recomputes a fresh one synchronously before paint next time.
+    if (!isActive || !hasHoverMedia) return;
     const el = floatRef.current;
     const stage = stageRef.current;
     if (!el || !stage) return;
@@ -369,37 +374,46 @@ function IconItem({
       style={{ top: `${position.top}%`, left: `${position.left}%` }}
     >
       <div className="relative">
-        <div ref={floatRef}>
-          <button
-            type="button"
-            aria-label={icon.alt}
-            aria-expanded={isActive}
-            onMouseEnter={icon.special ? triggerSpecialReveal : onActivate}
-            onMouseLeave={onDeactivate}
-            onFocus={icon.special ? triggerSpecialReveal : onActivate}
-            onBlur={onDeactivate}
-            // Tapping on mobile synthesizes mouseover (which activates via
-            // onActivate) immediately followed by click — wiring this to a
-            // toggle would see it as "already active" and instantly close
-            // it again. Always activating keeps a tap idempotent.
-            onClick={icon.special ? triggerSpecialReveal : onActivate}
-            style={
-              isActive && hasHoverMedia && hoverSize
-                ? { width: hoverSize, height: hoverSize, transform: `translate(${hoverShift.x}px, ${hoverShift.y}px)` }
-                : undefined
-            }
-            className={`${
-              isActive && hasHoverMedia ? hoverMediaSizeClasses : `${sizeClasses[icon.size]} hover:scale-110 focus:scale-110`
-            } cursor-pointer rounded-full transition-all duration-300 ease-out focus:outline-none`}
-          >
-            <IconGlyph
-              file={icon.file}
-              alt={icon.alt}
-              hoverVideo={icon.hoverVideo}
-              hoverImage={icon.hoverImage}
-              playVideo={isActive}
-            />
-          </button>
+        {/* Separate from floatRef below (which GSAP drives directly via its
+            own inline transform) so the disco beat-pulse — driven by
+            DiscoConductor writing --beat-scale on the stage — can scale
+            independently without the two fighting over the same inline
+            style. Skipped for the actively-hovered icon so e.g. sunglasses
+            itself doesn't pulse against its own beat. */}
+        <div style={isActive ? undefined : { transform: "scale(var(--beat-scale, 1))" }}>
+          <div ref={floatRef}>
+            <button
+              type="button"
+              aria-label={icon.alt}
+              aria-expanded={isActive}
+              onMouseEnter={icon.special ? triggerSpecialReveal : onActivate}
+              onMouseLeave={onDeactivate}
+              onFocus={icon.special ? triggerSpecialReveal : onActivate}
+              onBlur={onDeactivate}
+              // Tapping on mobile synthesizes mouseover (which activates via
+              // onActivate) immediately followed by click — wiring this to a
+              // toggle would see it as "already active" and instantly close
+              // it again. Always activating keeps a tap idempotent.
+              onClick={icon.special ? triggerSpecialReveal : onActivate}
+              style={
+                isActive && hasHoverMedia && hoverSize
+                  ? { width: hoverSize, height: hoverSize, transform: `translate(${hoverShift.x}px, ${hoverShift.y}px)` }
+                  : undefined
+              }
+              className={`${
+                isActive && hasHoverMedia ? hoverMediaSizeClasses : `${sizeClasses[icon.size]} hover:scale-110 focus:scale-110`
+              } cursor-pointer rounded-full transition-all duration-300 ease-out focus:outline-none`}
+            >
+              <IconGlyph
+                file={icon.file}
+                alt={icon.alt}
+                hoverVideo={icon.hoverVideo}
+                hoverImage={icon.hoverImage}
+                playVideo={isActive}
+                discoAudio={icon.discoOnHover}
+              />
+            </button>
+          </div>
         </div>
         {isActive && !icon.special && <Tooltip icon={icon} placement={placement} shift={hoverShift} />}
         {revealing && <Confetti />}
@@ -615,6 +629,139 @@ function SpecialReveal({ icon, onClose }: { icon: FloatingIconData; onClose: () 
   );
 }
 
+const DISCO_COLORS = ["#FF3CAC", "#784BA0", "#2B86C5", "#F9D923", "#EB5B00"];
+
+// Two large, blurred, counter-rotating conic gradients blended over the
+// stage — opacity riding on --beat-glow (written by DiscoConductor) so the
+// lights flare brighter on each detected beat instead of just spinning at a
+// constant brightness.
+function DiscoOverlay() {
+  return (
+    <div className="pointer-events-none absolute inset-0 z-[5] overflow-hidden" aria-hidden="true">
+      <div
+        className="animate-disco-sweep absolute"
+        style={{
+          inset: "-40%",
+          background: `conic-gradient(from 0deg, ${DISCO_COLORS.join(", ")}, ${DISCO_COLORS[0]})`,
+          opacity: "calc(0.22 + var(--beat-glow, 0) * 0.55)",
+          mixBlendMode: "screen",
+          filter: "blur(28px) saturate(1.6)",
+          animationDuration: "16s",
+        }}
+      />
+      <div
+        className="animate-disco-sweep absolute"
+        style={{
+          inset: "-40%",
+          background: `conic-gradient(from 180deg, ${DISCO_COLORS[2]}, ${DISCO_COLORS[4]}, ${DISCO_COLORS[1]}, ${DISCO_COLORS[3]}, ${DISCO_COLORS[2]})`,
+          opacity: "calc(0.18 + var(--beat-glow, 0) * 0.5)",
+          mixBlendMode: "screen",
+          filter: "blur(34px) saturate(1.6)",
+          animationDirection: "reverse",
+          animationDuration: "20s",
+        }}
+      />
+    </div>
+  );
+}
+
+// Taps the sunglasses hover video's audio via the Web Audio API and does
+// simple bass-energy beat detection (spike above a rolling average),
+// writing the result onto the stage as --beat-scale/--beat-glow custom
+// properties — every icon's pulse wrapper and DiscoOverlay just read those,
+// so this is the only place doing per-frame work.
+function DiscoConductor({ active, stageRef }: { active: boolean; stageRef: React.RefObject<HTMLDivElement | null> }) {
+  useEffect(() => {
+    if (!active) return;
+    const stage = stageRef.current;
+    if (!stage) return;
+
+    let cancelled = false;
+    let rafId: number | null = null;
+    let sourceNode: MediaElementAudioSourceNode | null = null;
+    let analyser: AnalyserNode | null = null;
+    let audioCtx: AudioContext | null = null;
+
+    const applyPulse = (p: number) => {
+      stage.style.setProperty("--beat-scale", (1 + p * 0.16).toFixed(4));
+      stage.style.setProperty("--beat-glow", p.toFixed(4));
+    };
+
+    // ~120bpm simulated pulse used if real analysis isn't available (older
+    // Safari, autoplay-policy quirks, etc.) so the disco effect still runs.
+    const tickFallback = () => {
+      if (cancelled) return;
+      const phase = (performance.now() % 500) / 500;
+      applyPulse(Math.max(0, 1 - phase * 2));
+      rafId = requestAnimationFrame(tickFallback);
+    };
+
+    const energyHistory: number[] = [];
+    let pulse = 0;
+    let lastBeat = 0;
+    const tick = (freqData: Uint8Array<ArrayBuffer>, node: AnalyserNode) => {
+      if (cancelled) return;
+      node.getByteFrequencyData(freqData);
+      let bassSum = 0;
+      for (let i = 1; i <= 8; i++) bassSum += freqData[i];
+      const bassEnergy = bassSum / 8 / 255;
+      energyHistory.push(bassEnergy);
+      if (energyHistory.length > 30) energyHistory.shift();
+      const avg = energyHistory.reduce((a, b) => a + b, 0) / energyHistory.length;
+      const now = performance.now();
+      if (bassEnergy > avg * 1.3 && bassEnergy > 0.12 && now - lastBeat > 220) {
+        lastBeat = now;
+        pulse = 1;
+      }
+      pulse *= 0.89;
+      applyPulse(pulse);
+      rafId = requestAnimationFrame(() => tick(freqData, node));
+    };
+
+    const setupAudio = (video: HTMLVideoElement) => {
+      try {
+        audioCtx = new AudioContext();
+        sourceNode = audioCtx.createMediaElementSource(video);
+        analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 512;
+        analyser.smoothingTimeConstant = 0.6;
+        sourceNode.connect(analyser);
+        analyser.connect(audioCtx.destination);
+        // No-op if already running; recovers it if the browser started the
+        // context suspended (autoplay policy).
+        audioCtx.resume().catch(() => {});
+        tick(new Uint8Array(analyser.frequencyBinCount), analyser);
+      } catch {
+        tickFallback();
+      }
+    };
+
+    // The hover video mounts in the same render as this effect activating —
+    // poll briefly rather than assuming it's already attached.
+    const findVideo = (attemptsLeft: number) => {
+      if (cancelled) return;
+      const video = stage.querySelector<HTMLVideoElement>('video[data-disco-audio="true"]');
+      if (video) setupAudio(video);
+      else if (attemptsLeft > 0) requestAnimationFrame(() => findVideo(attemptsLeft - 1));
+      else tickFallback();
+    };
+    findVideo(30);
+
+    return () => {
+      cancelled = true;
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      sourceNode?.disconnect();
+      analyser?.disconnect();
+      audioCtx?.close().catch(() => {});
+      stage.style.setProperty("--beat-scale", "1");
+      stage.style.setProperty("--beat-glow", "0");
+    };
+  }, [active, stageRef]);
+
+  if (!active) return null;
+  return <DiscoOverlay />;
+}
+
 export default function FloatingIcons() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [reduceMotion, setReduceMotion] = useState(
@@ -631,12 +778,13 @@ export default function FloatingIcons() {
     return () => query.removeEventListener("change", listener);
   }, []);
 
+  const activeIcon = floatingIcons.find((icon) => icon.id === activeId);
+
   useEffect(() => {
     if (!activeId) return;
     // The special reveal owns its own (animated) close — see SpecialReveal —
     // so this generic "click outside" handler should leave it alone rather
     // than yanking it out of the DOM instantly.
-    const activeIcon = floatingIcons.find((icon) => icon.id === activeId);
     if (activeIcon?.special) return;
     const handlePointerDown = (event: PointerEvent) => {
       if (!stageRef.current?.contains(event.target as Node)) return;
@@ -645,7 +793,7 @@ export default function FloatingIcons() {
     };
     document.addEventListener("pointerdown", handlePointerDown);
     return () => document.removeEventListener("pointerdown", handlePointerDown);
-  }, [activeId]);
+  }, [activeId, activeIcon?.special]);
 
   return (
     <main
@@ -675,11 +823,9 @@ export default function FloatingIcons() {
         />
       ))}
 
-      {(() => {
-        const activeIcon = floatingIcons.find((icon) => icon.id === activeId);
-        if (!activeIcon?.special) return null;
-        return <SpecialReveal icon={activeIcon} onClose={() => setActiveId(null)} />;
-      })()}
+      <DiscoConductor active={!reduceMotion && Boolean(activeIcon?.discoOnHover)} stageRef={stageRef} />
+
+      {activeIcon?.special && <SpecialReveal icon={activeIcon} onClose={() => setActiveId(null)} />}
     </main>
   );
 }

@@ -117,10 +117,30 @@ body {
     animation-timing-function: linear;
     animation-iteration-count: infinite;
   }
+
+  /* Sweeping disco spotlight — the beat-driven brightness/scale come from
+     the --beat-glow/--beat-scale custom properties, set per-frame from
+     audio analysis in DiscoConductor; this keyframe only handles the
+     continuous sweep so the lights aren't static between beats. */
+  @keyframes disco-sweep {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .animate-disco-sweep {
+    animation-name: disco-sweep;
+    animation-timing-function: linear;
+    animation-iteration-count: infinite;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .animate-flower-float {
+  .animate-flower-float,
+  .animate-disco-sweep {
     animation: none;
   }
 }
