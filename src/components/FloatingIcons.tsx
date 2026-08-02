@@ -327,10 +327,19 @@ function IconItem({
     // Every icon settles wherever keeps it on-screen (clamped as close to
     // its own position as possible), except the disco icon: it's the one
     // hover with sound + a beat effect worth actually watching, so it grows
-    // from the icon's spot but settles toward the stage's center instead of
-    // wherever it happens to be sitting (often a corner).
-    const desiredCenterX = icon.discoOnHover ? stageRect.width / 2 : centerX;
-    const desiredCenterY = icon.discoOnHover ? stageRect.height / 2 : centerY;
+    // from the icon's spot but settles toward center instead of wherever it
+    // happens to be sitting (often a corner). "Center" here means the
+    // middle of whatever's currently visible on screen, not the stage's own
+    // total height — the stage can be taller than the viewport (mobile uses
+    // 130vh so there's room to scroll), so centering on the stage's middle
+    // could land below the fold entirely.
+    const visibleLeft = Math.max(0, -stageRect.left);
+    const visibleRight = Math.min(stageRect.width, window.innerWidth - stageRect.left);
+    const visibleTop = Math.max(0, -stageRect.top);
+    const visibleBottom = Math.min(stageRect.height, window.innerHeight - stageRect.top);
+
+    const desiredCenterX = icon.discoOnHover ? (visibleLeft + visibleRight) / 2 : centerX;
+    const desiredCenterY = icon.discoOnHover ? (visibleTop + visibleBottom) / 2 : centerY;
 
     const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
     const clampedCenterX = clamp(desiredCenterX, margin + size / 2, stageRect.width - margin - size / 2);
