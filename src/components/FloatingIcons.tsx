@@ -691,6 +691,15 @@ function DiscoOverlay() {
   );
 }
 
+// Lazily created once and reused for the lifetime of the page — a fresh
+// AudioContext per hover paid its hardware-init cost every single time,
+// which was part of what made the hover video feel like it hung on click.
+let sharedAudioContext: AudioContext | null = null;
+function getSharedAudioContext(): AudioContext {
+  if (!sharedAudioContext) sharedAudioContext = new AudioContext();
+  return sharedAudioContext;
+}
+
 // Taps the sunglasses hover video's audio via the Web Audio API and does
 // simple bass-energy beat detection (spike above a rolling average),
 // writing the result onto the stage as --beat-scale/--beat-glow custom
@@ -706,7 +715,6 @@ function DiscoConductor({ active, stageRef }: { active: boolean; stageRef: React
     let rafId: number | null = null;
     let sourceNode: MediaElementAudioSourceNode | null = null;
     let analyser: AnalyserNode | null = null;
-    let audioCtx: AudioContext | null = null;
 
     const applyPulse = (p: number) => {
       stage.style.setProperty("--beat-scale", (1 + p * 0.16).toFixed(4));
@@ -759,39 +767,65 @@ function DiscoConductor({ active, stageRef }: { active: boolean; stageRef: React
 
     const setupAudio = (video: HTMLVideoElement) => {
       try {
-        audioCtx = new AudioContext();
-        sourceNode = audioCtx.createMediaElementSource(video);
-        analyser = audioCtx.createAnalyser();
+        const ctx = getSharedAudioContext();
+        sourceNode = ctx.createMediaElementSource(video);
+        analyser = ctx.createAnalyser();
         analyser.fftSize = 512;
         analyser.smoothingTimeConstant = 0.6;
         sourceNode.connect(analyser);
-        analyser.connect(audioCtx.destination);
+        analyser.connect(ctx.destination);
         // No-op if already running; recovers it if the browser started the
         // context suspended (autoplay policy).
-        audioCtx.resume().catch(() => {});
+        ctx.resume().catch(() => {});
         tick(new Uint8Array(analyser.frequencyBinCount), analyser, performance.now());
       } catch {
         tickFallback(performance.now());
       }
     };
 
+    let playingListenerCleanup: (() => void) | undefined;
+
     // The hover video mounts in the same render as this effect activating —
-    // poll briefly rather than assuming it's already attached.
+    // poll briefly rather than assuming it's already attached. Once found,
+    // wait for it to actually be playing before touching it: attaching a
+    // MediaElementAudioSourceNode while the video is still starting up is
+    // what was causing the hang-before-playback the video had.
     const findVideo = (attemptsLeft: number) => {
       if (cancelled) return;
       const video = stage.querySelector<HTMLVideoElement>('video[data-disco-audio="true"]');
-      if (video) setupAudio(video);
-      else if (attemptsLeft > 0) requestAnimationFrame(() => findVideo(attemptsLeft - 1));
+      if (video) {
+        if (!video.paused && video.currentTime > 0) {
+          setupAudio(video);
+          return;
+        }
+        const onPlaying = () => {
+          window.clearTimeout(fallbackTimer);
+          setupAudio(video);
+        };
+        video.addEventListener("playing", onPlaying, { once: true });
+        // Safety net in case autoplay never actually starts (e.g. blocked
+        // and the muted-fallback retry hasn't landed yet) — disco still runs.
+        const fallbackTimer = window.setTimeout(() => {
+          video.removeEventListener("playing", onPlaying);
+          if (!cancelled) tickFallback(performance.now());
+        }, 2000);
+        playingListenerCleanup = () => {
+          video.removeEventListener("playing", onPlaying);
+          window.clearTimeout(fallbackTimer);
+        };
+        return;
+      }
+      if (attemptsLeft > 0) requestAnimationFrame(() => findVideo(attemptsLeft - 1));
       else tickFallback(performance.now());
     };
     findVideo(30);
 
     return () => {
       cancelled = true;
+      playingListenerCleanup?.();
       if (rafId !== null) cancelAnimationFrame(rafId);
       sourceNode?.disconnect();
       analyser?.disconnect();
-      audioCtx?.close().catch(() => {});
       stage.style.setProperty("--beat-scale", "1");
       stage.style.setProperty("--beat-glow", "0");
     };
