@@ -694,6 +694,8 @@ function DiscoOverlay() {
 // before starting. Not worth it; a simulated pulse reads the same to a
 // viewer and never touches the video at all.
 function DiscoConductor({ active, stageRef }: { active: boolean; stageRef: React.RefObject<HTMLDivElement | null> }) {
+  const [ready, setReady] = useState(false);
+
   useEffect(() => {
     if (!active) return;
     const stage = stageRef.current;
@@ -701,6 +703,10 @@ function DiscoConductor({ active, stageRef }: { active: boolean; stageRef: React
 
     let cancelled = false;
     let rafId: number | null = null;
+    let pollId: number | null = null;
+    let fallbackTimer: number | undefined;
+    let video: HTMLVideoElement | null = null;
+    let onPlaying: (() => void) | undefined;
 
     const applyPulse = (p: number) => {
       stage.style.setProperty("--beat-scale", (1 + p * 0.16).toFixed(4));
@@ -723,17 +729,52 @@ function DiscoConductor({ active, stageRef }: { active: boolean; stageRef: React
       }
       rafId = requestAnimationFrame(tick);
     };
-    rafId = requestAnimationFrame(tick);
+
+    const start = () => {
+      if (cancelled) return;
+      setReady(true);
+      rafId = requestAnimationFrame(tick);
+    };
+
+    // Let the video be the first thing that visibly happens on hover — wait
+    // for it to actually start playing (a passive listener; unlike the old
+    // Web Audio setup, this never touches the video itself) before kicking
+    // in the pulse and disco lights, rather than starting everything at once.
+    const findVideo = (attemptsLeft: number) => {
+      if (cancelled) return;
+      video = stage.querySelector("video");
+      if (video) {
+        if (!video.paused && video.currentTime > 0) {
+          start();
+          return;
+        }
+        onPlaying = () => {
+          window.clearTimeout(fallbackTimer);
+          start();
+        };
+        video.addEventListener("playing", onPlaying, { once: true });
+        // Safety net in case autoplay never actually starts (e.g. blocked).
+        fallbackTimer = window.setTimeout(start, 1500);
+        return;
+      }
+      if (attemptsLeft > 0) pollId = requestAnimationFrame(() => findVideo(attemptsLeft - 1));
+      else start();
+    };
+    findVideo(30);
 
     return () => {
       cancelled = true;
       if (rafId !== null) cancelAnimationFrame(rafId);
+      if (pollId !== null) cancelAnimationFrame(pollId);
+      window.clearTimeout(fallbackTimer);
+      video?.removeEventListener("playing", onPlaying as () => void);
       stage.style.setProperty("--beat-scale", "1");
       stage.style.setProperty("--beat-glow", "0");
+      setReady(false);
     };
   }, [active, stageRef]);
 
-  if (!active) return null;
+  if (!active || !ready) return null;
   return <DiscoOverlay />;
 }
 
