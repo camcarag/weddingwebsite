@@ -67,7 +67,7 @@ const sizeClasses = [
 // hover media instead of overlapping it.
 const hoverMediaSizeClasses = "h-[12rem] w-[12rem] sm:h-[15rem] sm:w-[15rem]";
 
-function HoverVideo({ src, discoAudio }: { src: string; discoAudio?: boolean }) {
+function HoverVideo({ src }: { src: string }) {
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
@@ -106,9 +106,6 @@ function HoverVideo({ src, discoAudio }: { src: string; discoAudio?: boolean }) 
       src={src}
       loop
       playsInline
-      // Lets DiscoConductor find this element to tap its audio for
-      // beat-driven pulsing — see discoOnHover on FloatingIconData.
-      data-disco-audio={discoAudio ? "true" : undefined}
       className="h-full w-full select-none rounded-full object-cover drop-shadow-md"
     />
   );
@@ -120,14 +117,12 @@ function IconGlyph({
   hoverVideo,
   hoverImage,
   playVideo,
-  discoAudio,
 }: {
   file: string;
   alt: string;
   hoverVideo?: string;
   hoverImage?: string;
   playVideo?: boolean;
-  discoAudio?: boolean;
 }) {
   const [broken, setBroken] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
@@ -158,7 +153,7 @@ function IconGlyph({
   }
 
   if (hoverVideo && playVideo) {
-    return <HoverVideo src={`/${hoverVideo}`} discoAudio={discoAudio} />;
+    return <HoverVideo src={`/${hoverVideo}`} />;
   }
 
   if (hoverImage && playVideo) {
@@ -426,7 +421,6 @@ function IconItem({
                 hoverVideo={icon.hoverVideo}
                 hoverImage={icon.hoverImage}
                 playVideo={isActive}
-                discoAudio={icon.discoOnHover}
               />
             </button>
           </div>
@@ -691,20 +685,14 @@ function DiscoOverlay() {
   );
 }
 
-// Lazily created once and reused for the lifetime of the page — a fresh
-// AudioContext per hover paid its hardware-init cost every single time,
-// which was part of what made the hover video feel like it hung on click.
-let sharedAudioContext: AudioContext | null = null;
-function getSharedAudioContext(): AudioContext {
-  if (!sharedAudioContext) sharedAudioContext = new AudioContext();
-  return sharedAudioContext;
-}
-
-// Taps the sunglasses hover video's audio via the Web Audio API and does
-// simple bass-energy beat detection (spike above a rolling average),
-// writing the result onto the stage as --beat-scale/--beat-glow custom
-// properties — every icon's pulse wrapper and DiscoOverlay just read those,
-// so this is the only place doing per-frame work.
+// Drives --beat-scale/--beat-glow with a fixed ~120bpm simulated pulse —
+// every icon's pulse wrapper and DiscoOverlay just read those custom
+// properties, so this is the only place doing per-frame work. This used to
+// tap the hover video's actual audio via the Web Audio API for real beat
+// detection, but attaching a MediaElementAudioSourceNode to the video —
+// even deferred until its 'playing' event — was still causing it to hang
+// before starting. Not worth it; a simulated pulse reads the same to a
+// viewer and never touches the video at all.
 function DiscoConductor({ active, stageRef }: { active: boolean; stageRef: React.RefObject<HTMLDivElement | null> }) {
   useEffect(() => {
     if (!active) return;
@@ -713,8 +701,6 @@ function DiscoConductor({ active, stageRef }: { active: boolean; stageRef: React
 
     let cancelled = false;
     let rafId: number | null = null;
-    let sourceNode: MediaElementAudioSourceNode | null = null;
-    let analyser: AnalyserNode | null = null;
 
     const applyPulse = (p: number) => {
       stage.style.setProperty("--beat-scale", (1 + p * 0.16).toFixed(4));
@@ -722,110 +708,26 @@ function DiscoConductor({ active, stageRef }: { active: boolean; stageRef: React
     };
 
     // Writing --beat-scale/--beat-glow forces a style recalc across every
-    // icon's pulse wrapper plus the two blurred disco layers, and that was
-    // happening on every single rAF (~60/s) — competing with the hover
-    // video itself for paint/compositor budget and making it stutter.
-    // ~30fps still reads as a smooth pulse, so gate updates to that.
+    // icon's pulse wrapper plus the two blurred disco layers, so this is
+    // throttled to ~30fps rather than every rAF (~60fps) — still reads as
+    // a smooth pulse.
     const FRAME_INTERVAL_MS = 1000 / 30;
     let lastFrameAt = 0;
 
-    // ~120bpm simulated pulse used if real analysis isn't available (older
-    // Safari, autoplay-policy quirks, etc.) so the disco effect still runs.
-    const tickFallback = (now: number) => {
+    const tick = (now: number) => {
       if (cancelled) return;
       if (now - lastFrameAt >= FRAME_INTERVAL_MS) {
         lastFrameAt = now;
         const phase = (now % 500) / 500;
         applyPulse(Math.max(0, 1 - phase * 2));
       }
-      rafId = requestAnimationFrame(tickFallback);
+      rafId = requestAnimationFrame(tick);
     };
-
-    const energyHistory: number[] = [];
-    let pulse = 0;
-    let lastBeat = 0;
-    const tick = (freqData: Uint8Array<ArrayBuffer>, node: AnalyserNode, now: number) => {
-      if (cancelled) return;
-      if (now - lastFrameAt >= FRAME_INTERVAL_MS) {
-        lastFrameAt = now;
-        node.getByteFrequencyData(freqData);
-        let bassSum = 0;
-        for (let i = 1; i <= 8; i++) bassSum += freqData[i];
-        const bassEnergy = bassSum / 8 / 255;
-        energyHistory.push(bassEnergy);
-        if (energyHistory.length > 30) energyHistory.shift();
-        const avg = energyHistory.reduce((a, b) => a + b, 0) / energyHistory.length;
-        if (bassEnergy > avg * 1.3 && bassEnergy > 0.12 && now - lastBeat > 220) {
-          lastBeat = now;
-          pulse = 1;
-        }
-        pulse *= 0.89;
-        applyPulse(pulse);
-      }
-      rafId = requestAnimationFrame((t) => tick(freqData, node, t));
-    };
-
-    const setupAudio = (video: HTMLVideoElement) => {
-      try {
-        const ctx = getSharedAudioContext();
-        sourceNode = ctx.createMediaElementSource(video);
-        analyser = ctx.createAnalyser();
-        analyser.fftSize = 512;
-        analyser.smoothingTimeConstant = 0.6;
-        sourceNode.connect(analyser);
-        analyser.connect(ctx.destination);
-        // No-op if already running; recovers it if the browser started the
-        // context suspended (autoplay policy).
-        ctx.resume().catch(() => {});
-        tick(new Uint8Array(analyser.frequencyBinCount), analyser, performance.now());
-      } catch {
-        tickFallback(performance.now());
-      }
-    };
-
-    let playingListenerCleanup: (() => void) | undefined;
-
-    // The hover video mounts in the same render as this effect activating —
-    // poll briefly rather than assuming it's already attached. Once found,
-    // wait for it to actually be playing before touching it: attaching a
-    // MediaElementAudioSourceNode while the video is still starting up is
-    // what was causing the hang-before-playback the video had.
-    const findVideo = (attemptsLeft: number) => {
-      if (cancelled) return;
-      const video = stage.querySelector<HTMLVideoElement>('video[data-disco-audio="true"]');
-      if (video) {
-        if (!video.paused && video.currentTime > 0) {
-          setupAudio(video);
-          return;
-        }
-        const onPlaying = () => {
-          window.clearTimeout(fallbackTimer);
-          setupAudio(video);
-        };
-        video.addEventListener("playing", onPlaying, { once: true });
-        // Safety net in case autoplay never actually starts (e.g. blocked
-        // and the muted-fallback retry hasn't landed yet) — disco still runs.
-        const fallbackTimer = window.setTimeout(() => {
-          video.removeEventListener("playing", onPlaying);
-          if (!cancelled) tickFallback(performance.now());
-        }, 2000);
-        playingListenerCleanup = () => {
-          video.removeEventListener("playing", onPlaying);
-          window.clearTimeout(fallbackTimer);
-        };
-        return;
-      }
-      if (attemptsLeft > 0) requestAnimationFrame(() => findVideo(attemptsLeft - 1));
-      else tickFallback(performance.now());
-    };
-    findVideo(30);
+    rafId = requestAnimationFrame(tick);
 
     return () => {
       cancelled = true;
-      playingListenerCleanup?.();
       if (rafId !== null) cancelAnimationFrame(rafId);
-      sourceNode?.disconnect();
-      analyser?.disconnect();
       stage.style.setProperty("--beat-scale", "1");
       stage.style.setProperty("--beat-glow", "0");
     };
