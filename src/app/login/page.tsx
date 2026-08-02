@@ -26,7 +26,7 @@ export default async function LoginPage({
           placeholder="Password"
           autoFocus
           required
-          className="w-full rounded-full border border-neutral-900/15 px-4 py-2.5 text-center text-sm outline-none focus:border-[#204C32]"
+          className="w-full rounded-full border border-neutral-900/15 px-4 py-2.5 text-center text-sm text-neutral-900 outline-none focus:border-[#204C32]"
         />
         {error && <p className="mt-3 text-sm text-red-600">That&apos;s not it — try again.</p>}
         <button
