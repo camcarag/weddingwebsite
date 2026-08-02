@@ -802,16 +802,37 @@ function DiscoConductor({ active, stageRef }: { active: boolean; stageRef: React
       rafId = requestAnimationFrame(tick);
     };
 
+    let started = false;
     const start = () => {
-      if (cancelled) return;
+      if (cancelled || started) return;
+      started = true;
+      window.clearTimeout(fallbackTimer);
       setReady(true);
       rafId = requestAnimationFrame(tick);
     };
 
     // Let the video be the first thing that visibly happens on hover — wait
-    // for it to actually start playing (a passive listener; unlike the old
-    // Web Audio setup, this never touches the video itself) before kicking
-    // in the pulse and disco lights, rather than starting everything at once.
+    // for an actual frame to be presented before kicking in the pulse and
+    // disco lights, rather than starting everything at once. The 'playing'
+    // event alone isn't a strong enough signal: it fires once the browser
+    // has decided to start playback, which can precede the first frame
+    // actually reaching the screen by a beat, especially on slower mobile
+    // hardware — requestVideoFrameCallback fires only once a real frame has
+    // been sent to the compositor, so disco genuinely can't beat it.
+    const waitForFrame = (v: HTMLVideoElement) => {
+      // HTMLVideoElement's declared type always has this method, so a
+      // plain `"x" in v` check narrows the else branch to `never` — go
+      // through an untyped lookup instead for genuine runtime detection
+      // (older Safari/Firefox don't actually implement it).
+      const rvfc = (v as unknown as { requestVideoFrameCallback?: (cb: () => void) => number }).requestVideoFrameCallback;
+      if (rvfc) {
+        rvfc.call(v, () => start());
+      } else {
+        onPlaying = () => start();
+        v.addEventListener("playing", onPlaying, { once: true });
+      }
+    };
+
     const findVideo = (attemptsLeft: number) => {
       if (cancelled) return;
       video = stage.querySelector("video");
@@ -820,11 +841,7 @@ function DiscoConductor({ active, stageRef }: { active: boolean; stageRef: React
           start();
           return;
         }
-        onPlaying = () => {
-          window.clearTimeout(fallbackTimer);
-          start();
-        };
-        video.addEventListener("playing", onPlaying, { once: true });
+        waitForFrame(video);
         // Safety net in case autoplay never actually starts (e.g. blocked).
         fallbackTimer = window.setTimeout(start, 1500);
         return;
