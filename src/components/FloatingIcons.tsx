@@ -73,15 +73,31 @@ function HoverVideo({ src, discoAudio }: { src: string; discoAudio?: boolean }) 
   useEffect(() => {
     const el = videoRef.current;
     if (!el) return;
+
     // Try with sound first — browsers allow unmuted autoplay once the user
     // has interacted with the page at all (not necessarily this element),
     // so this succeeds for most hovers after the first click anywhere on
     // the site. Fall back to muted so the video still plays visually on a
-    // cold first hover.
+    // cold first hover, then retry unmuted once on the next real gesture
+    // (hover itself never counts as one) so sound kicks in instead of
+    // staying silent for the rest of that hover.
+    let retryCleanup: (() => void) | undefined;
     el.play().catch(() => {
       el.muted = true;
       el.play().catch(() => {});
+      const retry = () => {
+        el.muted = false;
+        el.play().catch(() => {});
+      };
+      document.addEventListener("pointerdown", retry, { once: true });
+      document.addEventListener("keydown", retry, { once: true });
+      retryCleanup = () => {
+        document.removeEventListener("pointerdown", retry);
+        document.removeEventListener("keydown", retry);
+      };
     });
+
+    return () => retryCleanup?.();
   }, []);
 
   return (
@@ -637,28 +653,38 @@ const DISCO_COLORS = ["#FF3CAC", "#784BA0", "#2B86C5", "#F9D923", "#EB5B00"];
 // constant brightness.
 function DiscoOverlay() {
   return (
-    <div className="pointer-events-none absolute inset-0 z-[5] overflow-hidden" aria-hidden="true">
+    <div
+      className="pointer-events-none absolute inset-0 z-[5] overflow-hidden"
+      aria-hidden="true"
+      // Isolate this subtree onto its own compositor layer so animating/
+      // repainting it (blur + mix-blend-mode are both expensive) doesn't
+      // force the browser to repaint siblings — the hover video included —
+      // on every frame.
+      style={{ isolation: "isolate", willChange: "opacity" }}
+    >
       <div
         className="animate-disco-sweep absolute"
         style={{
-          inset: "-40%",
+          inset: "-15%",
           background: `conic-gradient(from 0deg, ${DISCO_COLORS.join(", ")}, ${DISCO_COLORS[0]})`,
           opacity: "calc(0.22 + var(--beat-glow, 0) * 0.55)",
           mixBlendMode: "screen",
-          filter: "blur(28px) saturate(1.6)",
+          filter: "blur(20px) saturate(1.6)",
           animationDuration: "16s",
+          willChange: "transform",
         }}
       />
       <div
         className="animate-disco-sweep absolute"
         style={{
-          inset: "-40%",
+          inset: "-15%",
           background: `conic-gradient(from 180deg, ${DISCO_COLORS[2]}, ${DISCO_COLORS[4]}, ${DISCO_COLORS[1]}, ${DISCO_COLORS[3]}, ${DISCO_COLORS[2]})`,
           opacity: "calc(0.18 + var(--beat-glow, 0) * 0.5)",
           mixBlendMode: "screen",
-          filter: "blur(34px) saturate(1.6)",
+          filter: "blur(24px) saturate(1.6)",
           animationDirection: "reverse",
           animationDuration: "20s",
+          willChange: "transform",
         }}
       />
     </div>
@@ -687,35 +713,48 @@ function DiscoConductor({ active, stageRef }: { active: boolean; stageRef: React
       stage.style.setProperty("--beat-glow", p.toFixed(4));
     };
 
+    // Writing --beat-scale/--beat-glow forces a style recalc across every
+    // icon's pulse wrapper plus the two blurred disco layers, and that was
+    // happening on every single rAF (~60/s) — competing with the hover
+    // video itself for paint/compositor budget and making it stutter.
+    // ~30fps still reads as a smooth pulse, so gate updates to that.
+    const FRAME_INTERVAL_MS = 1000 / 30;
+    let lastFrameAt = 0;
+
     // ~120bpm simulated pulse used if real analysis isn't available (older
     // Safari, autoplay-policy quirks, etc.) so the disco effect still runs.
-    const tickFallback = () => {
+    const tickFallback = (now: number) => {
       if (cancelled) return;
-      const phase = (performance.now() % 500) / 500;
-      applyPulse(Math.max(0, 1 - phase * 2));
+      if (now - lastFrameAt >= FRAME_INTERVAL_MS) {
+        lastFrameAt = now;
+        const phase = (now % 500) / 500;
+        applyPulse(Math.max(0, 1 - phase * 2));
+      }
       rafId = requestAnimationFrame(tickFallback);
     };
 
     const energyHistory: number[] = [];
     let pulse = 0;
     let lastBeat = 0;
-    const tick = (freqData: Uint8Array<ArrayBuffer>, node: AnalyserNode) => {
+    const tick = (freqData: Uint8Array<ArrayBuffer>, node: AnalyserNode, now: number) => {
       if (cancelled) return;
-      node.getByteFrequencyData(freqData);
-      let bassSum = 0;
-      for (let i = 1; i <= 8; i++) bassSum += freqData[i];
-      const bassEnergy = bassSum / 8 / 255;
-      energyHistory.push(bassEnergy);
-      if (energyHistory.length > 30) energyHistory.shift();
-      const avg = energyHistory.reduce((a, b) => a + b, 0) / energyHistory.length;
-      const now = performance.now();
-      if (bassEnergy > avg * 1.3 && bassEnergy > 0.12 && now - lastBeat > 220) {
-        lastBeat = now;
-        pulse = 1;
+      if (now - lastFrameAt >= FRAME_INTERVAL_MS) {
+        lastFrameAt = now;
+        node.getByteFrequencyData(freqData);
+        let bassSum = 0;
+        for (let i = 1; i <= 8; i++) bassSum += freqData[i];
+        const bassEnergy = bassSum / 8 / 255;
+        energyHistory.push(bassEnergy);
+        if (energyHistory.length > 30) energyHistory.shift();
+        const avg = energyHistory.reduce((a, b) => a + b, 0) / energyHistory.length;
+        if (bassEnergy > avg * 1.3 && bassEnergy > 0.12 && now - lastBeat > 220) {
+          lastBeat = now;
+          pulse = 1;
+        }
+        pulse *= 0.89;
+        applyPulse(pulse);
       }
-      pulse *= 0.89;
-      applyPulse(pulse);
-      rafId = requestAnimationFrame(() => tick(freqData, node));
+      rafId = requestAnimationFrame((t) => tick(freqData, node, t));
     };
 
     const setupAudio = (video: HTMLVideoElement) => {
@@ -730,9 +769,9 @@ function DiscoConductor({ active, stageRef }: { active: boolean; stageRef: React
         // No-op if already running; recovers it if the browser started the
         // context suspended (autoplay policy).
         audioCtx.resume().catch(() => {});
-        tick(new Uint8Array(analyser.frequencyBinCount), analyser);
+        tick(new Uint8Array(analyser.frequencyBinCount), analyser, performance.now());
       } catch {
-        tickFallback();
+        tickFallback(performance.now());
       }
     };
 
@@ -743,7 +782,7 @@ function DiscoConductor({ active, stageRef }: { active: boolean; stageRef: React
       const video = stage.querySelector<HTMLVideoElement>('video[data-disco-audio="true"]');
       if (video) setupAudio(video);
       else if (attemptsLeft > 0) requestAnimationFrame(() => findVideo(attemptsLeft - 1));
-      else tickFallback();
+      else tickFallback(performance.now());
     };
     findVideo(30);
 

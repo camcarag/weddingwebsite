@@ -121,7 +121,7 @@ export const floatingIcons: FloatingIconData[] = [
     file: "huggy.png",
     alt: "Painting of two figures hugging cheek to cheek",
     title: "Cheek to cheek",
-    blurb: "A painting Cam made of us. We love cheek to cheek and huggy! Jon's painting for comparison:",
+    blurb: "A painting Cam made of us. We love cheek to cheek and huggy! Jon's painting in comparison:",
     size: 2,
     hoverImage: "jonpainting-hover.jpg",
   },
