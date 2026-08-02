@@ -42,6 +42,7 @@ public/*.MOV
 public/engagement.jpg
 public/jonpainting.JPG
 public/icons/*.png
+public/camnjonlogosavethedate.png
 
 # typescript
 *.tsbuildinfo

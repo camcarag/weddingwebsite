@@ -661,7 +661,7 @@ function SpecialReveal({ icon, onClose }: { icon: FloatingIconData; onClose: () 
         <div className="relative">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="/camnjonlogosavethedate.png"
+            src="/camnjonlogosavethedate.webp"
             alt="Cam and Jon save the date"
             className="max-h-[80vh] max-w-full rounded-[2rem] shadow-2xl"
           />
@@ -851,6 +851,14 @@ export default function FloatingIcons() {
     const listener = (e: MediaQueryListEvent) => setReduceMotion(e.matches);
     query.addEventListener("change", listener);
     return () => query.removeEventListener("change", listener);
+  }, []);
+
+  // The reveal image only renders once the suitcase's shake animation
+  // finishes (~0.4s) — quietly fetch it into cache as soon as the page
+  // loads instead, so by the time anyone triggers the reveal it's instant.
+  useEffect(() => {
+    const img = new Image();
+    img.src = "/camnjonlogosavethedate.webp";
   }, []);
 
   const activeIcon = floatingIcons.find((icon) => icon.id === activeId);
