@@ -26,7 +26,10 @@ export default async function LoginPage({
           placeholder="Password"
           autoFocus
           required
-          className="w-full rounded-full border border-neutral-900/15 px-4 py-2.5 text-center text-sm text-neutral-900 outline-none focus:border-[#204C32]"
+          // iOS Safari auto-zooms the viewport on focus for any input under
+          // 16px, and that zoomed-in state can persist after the form
+          // redirects to "/" — text-base (16px) keeps it from triggering.
+          className="w-full rounded-full border border-neutral-900/15 px-4 py-2.5 text-center text-base text-neutral-900 outline-none focus:border-[#204C32]"
         />
         {error && <p className="mt-3 text-sm text-red-600">That&apos;s not it — try again.</p>}
         <button
