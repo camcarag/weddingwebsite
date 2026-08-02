@@ -82,6 +82,7 @@ function HoverVideo({ src }: { src: string }) {
     // (hover itself never counts as one) so sound kicks in instead of
     // staying silent for the rest of that hover.
     let retryCleanup: (() => void) | undefined;
+    let armTimer: number | undefined;
     el.play().catch(() => {
       el.muted = true;
       el.play().catch(() => {});
@@ -89,15 +90,27 @@ function HoverVideo({ src }: { src: string }) {
         el.muted = false;
         el.play().catch(() => {});
       };
-      document.addEventListener("pointerdown", retry, { once: true });
-      document.addEventListener("keydown", retry, { once: true });
-      retryCleanup = () => {
-        document.removeEventListener("pointerdown", retry);
-        document.removeEventListener("keydown", retry);
-      };
+      // On mobile, the tap that just activated this hover is itself a
+      // multi-part gesture (touchstart/touchend/mouseover/mousedown/click);
+      // onMouseEnter fires early in that sequence, so arming immediately
+      // could catch that same tap's own trailing mousedown/click — unmuting
+      // and re-calling play() on a video that's already mid-decode, which
+      // stalls it the same way the old Web Audio setup did. Wait a beat so
+      // only a genuinely later gesture can trigger the retry.
+      armTimer = window.setTimeout(() => {
+        document.addEventListener("pointerdown", retry, { once: true });
+        document.addEventListener("keydown", retry, { once: true });
+        retryCleanup = () => {
+          document.removeEventListener("pointerdown", retry);
+          document.removeEventListener("keydown", retry);
+        };
+      }, 500);
     });
 
-    return () => retryCleanup?.();
+    return () => {
+      window.clearTimeout(armTimer);
+      retryCleanup?.();
+    };
   }, []);
 
   return (
