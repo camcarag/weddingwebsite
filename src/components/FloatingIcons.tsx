@@ -175,6 +175,7 @@ function IconGlyph({
       src={`/icons/${file}`}
       alt={alt}
       draggable={false}
+      loading="lazy"
       className="h-full w-full select-none object-contain drop-shadow-md"
     />
   );
@@ -184,25 +185,41 @@ function Tooltip({
   icon,
   placement,
   shift,
+  circleOverride,
 }: {
   icon: FloatingIconData;
   placement: { vertical: "above" | "below"; horizontal: "left" | "center" | "right" };
   shift: { x: number; y: number };
+  // For icons whose enlarged circle is a separate, independently-positioned
+  // decorative element (see driftsToCenter in IconItem) rather than this
+  // button's own box — the button/tooltip's shared "relative" ancestor
+  // stays small, so top-full/bottom-full below can't be used to clear it.
+  // Anchors with explicit pixel math against that circle instead.
+  circleOverride?: { size: number; shift: { x: number; y: number } };
 }) {
-  const vertical = placement.vertical === "below" ? "top-full mt-3" : "bottom-full mb-3";
-  const horizontal = placement.horizontal === "left" ? "left-0" : placement.horizontal === "right" ? "right-0" : "left-1/2";
-  // The video-enlarged icon can shift position to stay clear of the stage
-  // edges (see IconItem) — apply the same shift here so the tooltip moves
-  // with it instead of anchoring to the icon's un-shifted position and
-  // running off-screen itself.
-  const baseX = placement.horizontal === "center" ? "-50%" : "0px";
+  const style = circleOverride
+    ? {
+        // top:50%/left:50% here lands on the small button's own center (the
+        // shared anchor point the decorative circle also offsets from — see
+        // driftsToCenter in IconItem). X is centered on the circle
+        // (-50% of the tooltip's own width); Y is deliberately NOT
+        // centered — it's pinned to the circle's actual bottom edge
+        // (radius + gap below that anchor), not the circle's center.
+        top: "50%",
+        left: "50%",
+        transform: `translate(calc(-50% + ${circleOverride.shift.x}px), ${circleOverride.shift.y + circleOverride.size / 2 + 12}px)`,
+      }
+    : {
+        transform: `translate(calc(${placement.horizontal === "center" ? "-50%" : "0px"} + ${shift.x}px), ${shift.y}px)`,
+      };
+  const className = circleOverride
+    ? "absolute z-20 w-56 rounded-2xl border border-neutral-900/10 bg-white p-4 text-center shadow-lg"
+    : `absolute ${placement.vertical === "below" ? "top-full mt-3" : "bottom-full mb-3"} ${
+        placement.horizontal === "left" ? "left-0" : placement.horizontal === "right" ? "right-0" : "left-1/2"
+      } z-20 w-56 rounded-2xl border border-neutral-900/10 bg-white p-4 text-center shadow-lg`;
 
   return (
-    <div
-      role="status"
-      style={{ transform: `translate(calc(${baseX} + ${shift.x}px), ${shift.y}px)` }}
-      className={`absolute ${vertical} ${horizontal} z-20 w-56 rounded-2xl border border-neutral-900/10 bg-white p-4 text-center shadow-lg`}
-    >
+    <div role="status" style={style} className={className}>
       <p className="mb-1 text-xs uppercase tracking-[0.2em] text-neutral-500">{icon.title}</p>
       <p className="text-sm leading-snug text-neutral-800">{icon.blurb}</p>
     </div>
@@ -274,6 +291,14 @@ function IconItem({
   const revealingRef = useRef(false);
   const [revealing, setRevealing] = useState(false);
   const hasHoverMedia = Boolean(icon.hoverVideo || icon.hoverImage);
+  // The disco icon's circle drifts all the way toward the stage center
+  // (see the centering vs. edge-avoidance-only logic below), which can move
+  // it out from under the user's actual cursor — moving the interactive
+  // button itself caused a mouseleave/re-enter/mouseleave flicker loop. So
+  // for this icon only, the button stays put at its normal size (stable
+  // hit target) and a separate, pointer-events-none decorative element
+  // shows the enlarged, drifted video instead.
+  const driftsToCenter = Boolean(icon.discoOnHover);
   const [hoverSize, setHoverSize] = useState<number | null>(null);
   const [hoverShift, setHoverShift] = useState({ x: 0, y: 0 });
 
@@ -299,17 +324,21 @@ function IconItem({
     const preferred = window.innerWidth < 640 ? 192 : 240; // 12rem / 15rem
     const size = Math.max(96, Math.min(preferred, stageRect.width - margin * 2, stageRect.height - margin * 2));
 
-    let shiftX = 0;
-    if (centerX - size / 2 < margin) shiftX = margin - (centerX - size / 2);
-    else if (centerX + size / 2 > stageRect.width - margin) shiftX = stageRect.width - margin - (centerX + size / 2);
+    // Every icon settles wherever keeps it on-screen (clamped as close to
+    // its own position as possible), except the disco icon: it's the one
+    // hover with sound + a beat effect worth actually watching, so it grows
+    // from the icon's spot but settles toward the stage's center instead of
+    // wherever it happens to be sitting (often a corner).
+    const desiredCenterX = icon.discoOnHover ? stageRect.width / 2 : centerX;
+    const desiredCenterY = icon.discoOnHover ? stageRect.height / 2 : centerY;
 
-    let shiftY = 0;
-    if (centerY - size / 2 < margin) shiftY = margin - (centerY - size / 2);
-    else if (centerY + size / 2 > stageRect.height - margin) shiftY = stageRect.height - margin - (centerY + size / 2);
+    const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+    const clampedCenterX = clamp(desiredCenterX, margin + size / 2, stageRect.width - margin - size / 2);
+    const clampedCenterY = clamp(desiredCenterY, margin + size / 2, stageRect.height - margin - size / 2);
 
     setHoverSize(size);
-    setHoverShift({ x: shiftX, y: shiftY });
-  }, [isActive, hasHoverMedia, stageRef]);
+    setHoverShift({ x: clampedCenterX - centerX, y: clampedCenterY - centerY });
+  }, [isActive, hasHoverMedia, stageRef, icon.discoOnHover]);
 
   useEffect(() => {
     if (reduceMotion || !floatRef.current) return;
@@ -407,12 +436,14 @@ function IconItem({
               // it again. Always activating keeps a tap idempotent.
               onClick={icon.special ? triggerSpecialReveal : onActivate}
               style={
-                isActive && hasHoverMedia && hoverSize
+                isActive && hasHoverMedia && !driftsToCenter && hoverSize
                   ? { width: hoverSize, height: hoverSize, transform: `translate(${hoverShift.x}px, ${hoverShift.y}px)` }
                   : undefined
               }
               className={`${
-                isActive && hasHoverMedia ? hoverMediaSizeClasses : `${sizeClasses[icon.size]} hover:scale-110 focus:scale-110`
+                isActive && hasHoverMedia && !driftsToCenter
+                  ? hoverMediaSizeClasses
+                  : `${sizeClasses[icon.size]} hover:scale-110 focus:scale-110`
               } cursor-pointer rounded-full transition-all duration-300 ease-out focus:outline-none`}
             >
               <IconGlyph
@@ -420,12 +451,31 @@ function IconItem({
                 alt={icon.alt}
                 hoverVideo={icon.hoverVideo}
                 hoverImage={icon.hoverImage}
-                playVideo={isActive}
+                playVideo={isActive && !driftsToCenter}
               />
             </button>
           </div>
         </div>
-        {isActive && !icon.special && <Tooltip icon={icon} placement={placement} shift={hoverShift} />}
+        {isActive && hasHoverMedia && driftsToCenter && hoverSize && (
+          <div
+            className="pointer-events-none absolute top-1/2 left-1/2 overflow-hidden rounded-full transition-all duration-300 ease-out"
+            style={{
+              width: hoverSize,
+              height: hoverSize,
+              transform: `translate(-50%, -50%) translate(${hoverShift.x}px, ${hoverShift.y}px)`,
+            }}
+          >
+            <IconGlyph file={icon.file} alt={icon.alt} hoverVideo={icon.hoverVideo} hoverImage={icon.hoverImage} playVideo />
+          </div>
+        )}
+        {isActive && !icon.special && (
+          <Tooltip
+            icon={icon}
+            placement={placement}
+            shift={hoverShift}
+            circleOverride={driftsToCenter && hoverSize ? { size: hoverSize, shift: hoverShift } : undefined}
+          />
+        )}
         {revealing && <Confetti />}
       </div>
     </div>

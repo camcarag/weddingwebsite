@@ -22,7 +22,7 @@ export type FloatingIconData = {
 export const floatingIcons: FloatingIconData[] = [
   {
     id: "plant",
-    file: "plant.png",
+    file: "plant.webp",
     alt: "Potted monstera plant",
     title: "Plant parents",
     blurb: "We don't have any dogs, but we do have a ton of plants. Cam is the primary parent.",
@@ -30,7 +30,7 @@ export const floatingIcons: FloatingIconData[] = [
   },
   {
     id: "phone",
-    file: "phone.png",
+    file: "phone.webp",
     alt: "Phone in a blue case",
     title: "Selfie time",
     blurb: "Cam and Jon are selfie experts. If you haven't taken one with us yet, we should fix that.",
@@ -38,7 +38,7 @@ export const floatingIcons: FloatingIconData[] = [
   },
   {
     id: "croissant",
-    file: "croissant.png",
+    file: "croissant.webp",
     alt: "Croissant",
     title: "Croissant connoisseurs",
     blurb: "We love a good croissant. Our favorites are La Cabra and L'Appartement 4F.",
@@ -47,7 +47,7 @@ export const floatingIcons: FloatingIconData[] = [
   },
   {
     id: "hotpot",
-    file: "hotpot.png",
+    file: "hotpot.webp",
     alt: "Hotpot dinner",
     title: "We love hotpot!",
     blurb: "Our second date was at a hotpot restaurant, which turned out to be the first of many.",
@@ -55,7 +55,7 @@ export const floatingIcons: FloatingIconData[] = [
   },
   {
     id: "basketball",
-    file: "basketball.png",
+    file: "basketball.webp",
     alt: "Basketball",
     title: "First impressions last",
     blurb: "Jon wore basketball shorts to our first date. He still dreams of joining the NBA.",
@@ -64,7 +64,7 @@ export const floatingIcons: FloatingIconData[] = [
   },
   {
     id: "suitcase",
-    file: "suitcase.png",
+    file: "suitcase.webp",
     alt: "Pink carry-on suitcase",
     title: "Save the date, we hope you'll celebrate with us",
     blurb: "Pack your bags: we're tying the knot.",
@@ -73,7 +73,7 @@ export const floatingIcons: FloatingIconData[] = [
   },
   {
     id: "yoga-mat",
-    file: "yoga-mat.png",
+    file: "yoga-mat.webp",
     alt: "Rolled yoga mat",
     title: "Saturday yoga",
     blurb: "One thing we look forward to every week is our Saturday yoga. Jon swears he levitates.",
@@ -82,7 +82,7 @@ export const floatingIcons: FloatingIconData[] = [
   },
   {
     id: "grass",
-    file: "grass.png",
+    file: "grass.webp",
     alt: "Tuft of grass",
     title: "Grounding",
     blurb: "We joke that Jon is Cam's dog. She walks him to the park to touch grass.",
@@ -91,7 +91,7 @@ export const floatingIcons: FloatingIconData[] = [
   },
   {
     id: "sunglasses",
-    file: "sunglasses.png",
+    file: "sunglasses.webp",
     alt: "Sunglasses",
     title: "Sunshine",
     blurb: "Jon loved Cam's bright energy on their first date.",
@@ -101,7 +101,7 @@ export const floatingIcons: FloatingIconData[] = [
   },
   {
     id: "cap",
-    file: "cap.png",
+    file: "cap.webp",
     alt: "Baseball cap with a parrot patch",
     title: "Whose cap is it anyway?",
     blurb: "We have matching caps and somehow still end up stealing each other's.",
@@ -110,7 +110,7 @@ export const floatingIcons: FloatingIconData[] = [
   },
   {
     id: "poster",
-    file: "poster.png",
+    file: "poster.webp",
     alt: "Ted Lasso BELIEVE poster",
     title: "Believe",
     blurb: "One of the first shows we watched together was Ted Lasso. Many people say Jon is the Asian Ted Lasso.",
@@ -118,7 +118,7 @@ export const floatingIcons: FloatingIconData[] = [
   },
   {
     id: "huggy",
-    file: "huggy.png",
+    file: "huggy.webp",
     alt: "Painting of two figures hugging cheek to cheek",
     title: "Cheek to cheek",
     blurb: "A painting Cam made of us. We love cheek to cheek and huggy! Jon's painting in comparison:",
@@ -127,7 +127,7 @@ export const floatingIcons: FloatingIconData[] = [
   },
   {
     id: "roses",
-    file: "roses.png",
+    file: "roses.webp",
     alt: "Bouquet of roses",
     title: "The bouquet",
     blurb: "We got engaged with a big, beautiful bouquet of roses at Jon's parents' home in LA.",
