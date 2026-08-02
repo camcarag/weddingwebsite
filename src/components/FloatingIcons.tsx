@@ -774,6 +774,12 @@ function DiscoOverlay() {
 // (disco could rarely start a beat early/late relative to the video) but
 // removes the piece most likely to compound lag.
 const DISCO_START_DELAY_MS = 400;
+// The icon pulse (--beat-scale) touches every icon's transform — a much
+// bigger style-recalc footprint each frame than the lights alone
+// (--beat-glow, read only by the two overlay layers) — so it waits this
+// much longer on top, giving the video more uncontested time to get going
+// before that heavier work joins in.
+const PULSE_EXTRA_DELAY_MS = 400;
 
 function DiscoConductor({ active, stageRef }: { active: boolean; stageRef: React.RefObject<HTMLDivElement | null> }) {
   const [ready, setReady] = useState(false);
@@ -785,10 +791,11 @@ function DiscoConductor({ active, stageRef }: { active: boolean; stageRef: React
 
     let cancelled = false;
     let rafId: number | null = null;
+    let pulseReady = false;
 
     const applyPulse = (p: number) => {
-      stage.style.setProperty("--beat-scale", (1 + p * 0.16).toFixed(4));
       stage.style.setProperty("--beat-glow", p.toFixed(4));
+      if (pulseReady) stage.style.setProperty("--beat-scale", (1 + p * 0.16).toFixed(4));
     };
 
     // Writing --beat-scale/--beat-glow forces a style recalc across every
@@ -814,9 +821,14 @@ function DiscoConductor({ active, stageRef }: { active: boolean; stageRef: React
       rafId = requestAnimationFrame(tick);
     }, DISCO_START_DELAY_MS);
 
+    const pulseTimer = window.setTimeout(() => {
+      pulseReady = true;
+    }, DISCO_START_DELAY_MS + PULSE_EXTRA_DELAY_MS);
+
     return () => {
       cancelled = true;
       window.clearTimeout(startTimer);
+      window.clearTimeout(pulseTimer);
       if (rafId !== null) cancelAnimationFrame(rafId);
       stage.style.setProperty("--beat-scale", "1");
       stage.style.setProperty("--beat-glow", "0");
