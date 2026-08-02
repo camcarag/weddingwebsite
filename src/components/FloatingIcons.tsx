@@ -775,10 +775,9 @@ function DiscoConductor({ active, stageRef }: { active: boolean; stageRef: React
 
     let cancelled = false;
     let rafId: number | null = null;
-    let pollId: number | null = null;
-    let fallbackTimer: number | undefined;
     let video: HTMLVideoElement | null = null;
     let onPlaying: (() => void) | undefined;
+    let observer: MutationObserver | undefined;
 
     const applyPulse = (p: number) => {
       stage.style.setProperty("--beat-scale", (1 + p * 0.16).toFixed(4));
@@ -833,28 +832,43 @@ function DiscoConductor({ active, stageRef }: { active: boolean; stageRef: React
       }
     };
 
-    const findVideo = (attemptsLeft: number) => {
-      if (cancelled) return;
-      video = stage.querySelector("video");
-      if (video) {
-        if (!video.paused && video.currentTime > 0) {
-          start();
-          return;
-        }
-        waitForFrame(video);
-        // Safety net in case autoplay never actually starts (e.g. blocked).
-        fallbackTimer = window.setTimeout(start, 1500);
+    const onVideoFound = (v: HTMLVideoElement) => {
+      video = v;
+      if (!v.paused && v.currentTime > 0) {
+        start();
         return;
       }
-      if (attemptsLeft > 0) pollId = requestAnimationFrame(() => findVideo(attemptsLeft - 1));
-      else start();
+      waitForFrame(v);
     };
-    findVideo(30);
+
+    // The video element lives in a sibling component (IconItem) and only
+    // exists once ITS OWN state update (computing the enlarged circle's
+    // size) has committed — polling for a fixed number of animation frames
+    // and giving up (starting disco with zero frame guarantee at all) if
+    // that hadn't happened yet was the likely culprit on slower mobile
+    // loads. A MutationObserver reacts to the actual DOM insertion whenever
+    // it happens instead of gambling on a frame budget.
+    const existing = stage.querySelector("video");
+    if (existing) {
+      onVideoFound(existing);
+    } else {
+      observer = new MutationObserver(() => {
+        const found = stage.querySelector("video");
+        if (found) {
+          observer?.disconnect();
+          onVideoFound(found);
+        }
+      });
+      observer.observe(stage, { childList: true, subtree: true });
+    }
+    // True last resort — the video genuinely never showed up (e.g. its own
+    // source failed to load). Generous since it's only a fallback.
+    const fallbackTimer = window.setTimeout(start, 4000);
 
     return () => {
       cancelled = true;
       if (rafId !== null) cancelAnimationFrame(rafId);
-      if (pollId !== null) cancelAnimationFrame(pollId);
+      observer?.disconnect();
       window.clearTimeout(fallbackTimer);
       video?.removeEventListener("playing", onPlaying as () => void);
       stage.style.setProperty("--beat-scale", "1");
