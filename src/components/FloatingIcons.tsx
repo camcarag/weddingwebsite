@@ -761,10 +761,20 @@ function DiscoOverlay() {
 // every icon's pulse wrapper and DiscoOverlay just read those custom
 // properties, so this is the only place doing per-frame work. This used to
 // tap the hover video's actual audio via the Web Audio API for real beat
-// detection, but attaching a MediaElementAudioSourceNode to the video —
-// even deferred until its 'playing' event — was still causing it to hang
-// before starting. Not worth it; a simulated pulse reads the same to a
-// viewer and never touches the video at all.
+// detection, but attaching a MediaElementAudioSourceNode to the video was
+// causing it to hang before starting. Not worth it; a simulated pulse reads
+// the same to a viewer and never touches the video at all.
+//
+// Starting used to also wait on detecting the video's actual first
+// composited frame (MutationObserver + requestVideoFrameCallback), so the
+// video was guaranteed to be the first thing that visibly happens. That
+// detection machinery was itself extra work competing for the main thread
+// right as the video tries to decode its first frames on constrained
+// devices — simplified to a flat delay instead. Slightly less precise
+// (disco could rarely start a beat early/late relative to the video) but
+// removes the piece most likely to compound lag.
+const DISCO_START_DELAY_MS = 400;
+
 function DiscoConductor({ active, stageRef }: { active: boolean; stageRef: React.RefObject<HTMLDivElement | null> }) {
   const [ready, setReady] = useState(false);
 
@@ -775,9 +785,6 @@ function DiscoConductor({ active, stageRef }: { active: boolean; stageRef: React
 
     let cancelled = false;
     let rafId: number | null = null;
-    let video: HTMLVideoElement | null = null;
-    let onPlaying: (() => void) | undefined;
-    let observer: MutationObserver | undefined;
 
     const applyPulse = (p: number) => {
       stage.style.setProperty("--beat-scale", (1 + p * 0.16).toFixed(4));
@@ -801,76 +808,16 @@ function DiscoConductor({ active, stageRef }: { active: boolean; stageRef: React
       rafId = requestAnimationFrame(tick);
     };
 
-    let started = false;
-    const start = () => {
-      if (cancelled || started) return;
-      started = true;
-      window.clearTimeout(fallbackTimer);
+    const startTimer = window.setTimeout(() => {
+      if (cancelled) return;
       setReady(true);
       rafId = requestAnimationFrame(tick);
-    };
-
-    // Let the video be the first thing that visibly happens on hover — wait
-    // for an actual frame to be presented before kicking in the pulse and
-    // disco lights, rather than starting everything at once. The 'playing'
-    // event alone isn't a strong enough signal: it fires once the browser
-    // has decided to start playback, which can precede the first frame
-    // actually reaching the screen by a beat, especially on slower mobile
-    // hardware — requestVideoFrameCallback fires only once a real frame has
-    // been sent to the compositor, so disco genuinely can't beat it.
-    const waitForFrame = (v: HTMLVideoElement) => {
-      // HTMLVideoElement's declared type always has this method, so a
-      // plain `"x" in v` check narrows the else branch to `never` — go
-      // through an untyped lookup instead for genuine runtime detection
-      // (older Safari/Firefox don't actually implement it).
-      const rvfc = (v as unknown as { requestVideoFrameCallback?: (cb: () => void) => number }).requestVideoFrameCallback;
-      if (rvfc) {
-        rvfc.call(v, () => start());
-      } else {
-        onPlaying = () => start();
-        v.addEventListener("playing", onPlaying, { once: true });
-      }
-    };
-
-    const onVideoFound = (v: HTMLVideoElement) => {
-      video = v;
-      if (!v.paused && v.currentTime > 0) {
-        start();
-        return;
-      }
-      waitForFrame(v);
-    };
-
-    // The video element lives in a sibling component (IconItem) and only
-    // exists once ITS OWN state update (computing the enlarged circle's
-    // size) has committed — polling for a fixed number of animation frames
-    // and giving up (starting disco with zero frame guarantee at all) if
-    // that hadn't happened yet was the likely culprit on slower mobile
-    // loads. A MutationObserver reacts to the actual DOM insertion whenever
-    // it happens instead of gambling on a frame budget.
-    const existing = stage.querySelector("video");
-    if (existing) {
-      onVideoFound(existing);
-    } else {
-      observer = new MutationObserver(() => {
-        const found = stage.querySelector("video");
-        if (found) {
-          observer?.disconnect();
-          onVideoFound(found);
-        }
-      });
-      observer.observe(stage, { childList: true, subtree: true });
-    }
-    // True last resort — the video genuinely never showed up (e.g. its own
-    // source failed to load). Generous since it's only a fallback.
-    const fallbackTimer = window.setTimeout(start, 4000);
+    }, DISCO_START_DELAY_MS);
 
     return () => {
       cancelled = true;
+      window.clearTimeout(startTimer);
       if (rafId !== null) cancelAnimationFrame(rafId);
-      observer?.disconnect();
-      window.clearTimeout(fallbackTimer);
-      video?.removeEventListener("playing", onPlaying as () => void);
       stage.style.setProperty("--beat-scale", "1");
       stage.style.setProperty("--beat-glow", "0");
       setReady(false);
