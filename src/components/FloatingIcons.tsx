@@ -895,7 +895,7 @@ export default function FloatingIcons() {
         <p className="mb-3 text-xs uppercase tracking-[0.35em] text-neutral-500">Save the Date</p>
         <h1 className={`${heading.className} text-3xl tracking-tight sm:text-4xl`} style={{ color: "#204C32" }}>Cam &amp; Jon</h1>
         <p className="mt-3 text-sm text-neutral-500">
-          Hover (or tap) around. One of these is hiding&nbsp;something.
+          Hover (or tap) around with your sound on. One of these is hiding&nbsp;something.
         </p>
       </div>
 
