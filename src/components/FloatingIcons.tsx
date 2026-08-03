@@ -334,7 +334,16 @@ function IconItem({
     const centerX = iconRect.left + iconRect.width / 2 - stageRect.left;
     const centerY = iconRect.top + iconRect.height / 2 - stageRect.top;
     const margin = 16;
-    const preferred = window.innerWidth < 640 ? 192 : 240; // 12rem / 15rem
+    // The disco icon gets a noticeably bigger circle than the rest — it's
+    // the one hover with sound + a beat effect worth actually seeing large,
+    // and it settles toward center (see below) so there's room for it.
+    const preferred = icon.discoOnHover
+      ? window.innerWidth < 640
+        ? 260
+        : 320
+      : window.innerWidth < 640
+        ? 192
+        : 240; // 12rem / 15rem
     const size = Math.max(96, Math.min(preferred, stageRect.width - margin * 2, stageRect.height - margin * 2));
 
     // Every icon settles wherever keeps it on-screen (clamped as close to
@@ -896,7 +905,7 @@ export default function FloatingIcons() {
         <h1 className={`${heading.className} text-3xl tracking-tight sm:text-4xl`} style={{ color: "#204C32" }}>Cam &amp; Jon</h1>
         <p className="mt-3 text-sm text-neutral-500">
           Sound on. Hover (or tap) around
-          <br className="sm:hidden" /> and see what you find.
+          <br /> and see what you find.
         </p>
       </div>
 
