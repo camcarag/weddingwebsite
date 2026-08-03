@@ -891,11 +891,12 @@ export default function FloatingIcons() {
       ref={stageRef}
       className="relative min-h-[130vh] w-full overflow-hidden bg-[#f6efe1] sm:min-h-screen"
     >
-      <div className="absolute top-8 left-6 z-10 max-w-xs text-left sm:top-10 sm:left-10">
+      <div className="absolute top-8 left-6 z-10 max-w-xs text-left sm:top-10 sm:left-10 sm:max-w-sm">
         <p className="mb-3 text-xs uppercase tracking-[0.35em] text-neutral-500">Save the Date</p>
         <h1 className={`${heading.className} text-3xl tracking-tight sm:text-4xl`} style={{ color: "#204C32" }}>Cam &amp; Jon</h1>
         <p className="mt-3 text-sm text-neutral-500">
-          Hover (or tap) around with your sound on. One of these is hiding&nbsp;something.
+          Sound on. Hover (or tap) around
+          <br className="sm:hidden" /> and see what you find.
         </p>
       </div>
 
