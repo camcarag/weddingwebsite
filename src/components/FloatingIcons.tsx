@@ -135,17 +135,49 @@ function HoverVideo({ src }: { src: string }) {
   );
 }
 
+function HoverImageSlideshow({ srcs, alt }: { srcs: string[]; alt: string }) {
+  const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    setIndex(0);
+    if (srcs.length < 2) return;
+    const id = window.setInterval(() => {
+      setIndex((i) => (i + 1) % srcs.length);
+    }, 2200);
+    return () => window.clearInterval(id);
+  }, [srcs]);
+
+  return (
+    <div className="relative h-full w-full">
+      {srcs.map((src, i) => (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          key={src}
+          src={`/${src}`}
+          alt={alt}
+          draggable={false}
+          className={`absolute inset-0 h-full w-full select-none rounded-full object-cover drop-shadow-md transition-opacity duration-500 ease-in-out ${
+            i === index ? "opacity-100" : "opacity-0"
+          }`}
+        />
+      ))}
+    </div>
+  );
+}
+
 function IconGlyph({
   file,
   alt,
   hoverVideo,
   hoverImage,
+  hoverImages,
   playVideo,
 }: {
   file: string;
   alt: string;
   hoverVideo?: string;
   hoverImage?: string;
+  hoverImages?: string[];
   playVideo?: boolean;
 }) {
   const [broken, setBroken] = useState(false);
@@ -178,6 +210,10 @@ function IconGlyph({
 
   if (hoverVideo && playVideo) {
     return <HoverVideo src={`/${hoverVideo}`} />;
+  }
+
+  if (hoverImages && hoverImages.length > 0 && playVideo) {
+    return <HoverImageSlideshow srcs={hoverImages} alt={alt} />;
   }
 
   if (hoverImage && playVideo) {
@@ -323,7 +359,7 @@ function IconItem({
   const tweenRef = useRef<gsap.core.Tween | null>(null);
   const revealingRef = useRef(false);
   const [revealing, setRevealing] = useState(false);
-  const hasHoverMedia = Boolean(icon.hoverVideo || icon.hoverImage);
+  const hasHoverMedia = Boolean(icon.hoverVideo || icon.hoverImage || icon.hoverImages?.length);
   // The disco icon's circle drifts all the way toward the stage center
   // (see the centering vs. edge-avoidance-only logic below), which can move
   // it out from under the user's actual cursor — moving the interactive
@@ -525,6 +561,7 @@ function IconItem({
                 alt={icon.alt}
                 hoverVideo={icon.hoverVideo}
                 hoverImage={icon.hoverImage}
+                hoverImages={icon.hoverImages}
                 playVideo={isActive && !driftsToCenter}
               />
             </button>
@@ -539,7 +576,14 @@ function IconItem({
               transform: `translate(-50%, -50%) translate(${hoverShift.x}px, ${hoverShift.y}px)`,
             }}
           >
-            <IconGlyph file={icon.file} alt={icon.alt} hoverVideo={icon.hoverVideo} hoverImage={icon.hoverImage} playVideo />
+            <IconGlyph
+              file={icon.file}
+              alt={icon.alt}
+              hoverVideo={icon.hoverVideo}
+              hoverImage={icon.hoverImage}
+              hoverImages={icon.hoverImages}
+              playVideo
+            />
           </div>
         )}
         {isActive && !icon.special && (

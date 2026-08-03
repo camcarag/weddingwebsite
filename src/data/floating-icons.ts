@@ -15,6 +15,8 @@ export type FloatingIconData = {
   hoverVideo?: string;
   /** Image (in /public) shown enlarged in place of the icon while hovered/focused. */
   hoverImage?: string;
+  /** Images (in /public) cross-faded through in place of the icon while hovered/focused. */
+  hoverImages?: string[];
   /** While hovered/focused, pulse the other icons to hoverVideo's beat and light up the screen with disco colors. */
   discoOnHover?: boolean;
 };
@@ -52,6 +54,7 @@ export const floatingIcons: FloatingIconData[] = [
     title: "We love hotpot!",
     blurb: "Our second date was at a hotpot restaurant, which turned out to be the first of many.",
     size: 3,
+    hoverImages: ["hotpot1-hover.jpg", "hotpot2-hover.jpg", "hotpot3-hover.jpg"],
   },
   {
     id: "basketball",
