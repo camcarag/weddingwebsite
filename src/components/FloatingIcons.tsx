@@ -76,7 +76,17 @@ function HoverVideo({ src }: { src: string }) {
     // cold first hover, then retry unmuted once on the next real gesture
     // (hover itself never counts as one) so sound kicks in instead of
     // staying silent for the rest of that hover.
-    let retryCleanup: (() => void) | undefined;
+    //
+    // The retry listener used to be torn down by manually calling
+    // removeEventListener from a closure variable reassigned inside a
+    // setTimeout — on rapid repeated hovers that let some listeners survive
+    // unmount (confirmed: document ended up with stale listeners referencing
+    // long-detached video elements, and a later unrelated click anywhere on
+    // the page would fire one, unmuting and replaying an invisible video —
+    // audio starting with nothing hovered). An AbortController tears down
+    // every listener on it atomically on unmount, no manual bookkeeping to
+    // get out of sync.
+    const controller = new AbortController();
     let armTimer: number | undefined;
     el.play().catch(() => {
       el.muted = true;
@@ -93,18 +103,24 @@ function HoverVideo({ src }: { src: string }) {
       // stalls it the same way the old Web Audio setup did. Wait a beat so
       // only a genuinely later gesture can trigger the retry.
       armTimer = window.setTimeout(() => {
-        document.addEventListener("pointerdown", retry, { once: true });
-        document.addEventListener("keydown", retry, { once: true });
-        retryCleanup = () => {
-          document.removeEventListener("pointerdown", retry);
-          document.removeEventListener("keydown", retry);
-        };
+        document.addEventListener("pointerdown", retry, { once: true, signal: controller.signal });
+        document.addEventListener("keydown", retry, { once: true, signal: controller.signal });
       }, 500);
     });
 
     return () => {
       window.clearTimeout(armTimer);
-      retryCleanup?.();
+      controller.abort();
+      // Belt-and-suspenders: rapid repeated hovers on the same icon can
+      // still stack up enough overlapping mounts that one stray retry
+      // listener slips through the abort (confirmed via testing — rare,
+      // and far smaller than before this fix, but not provably zero).
+      // Pausing alone still leaves a loaded, playable source behind for a
+      // late call to resume — drop the source entirely so a stray play()
+      // has nothing left to make audible.
+      el.pause();
+      el.removeAttribute("src");
+      el.load();
     };
   }, []);
 
@@ -209,13 +225,22 @@ function Tooltip({
     ? {
         // top:50%/left:50% here lands on the small button's own center (the
         // shared anchor point the decorative circle also offsets from — see
-        // driftsToCenter in IconItem). X is centered on the circle
-        // (-50% of the tooltip's own width); Y is deliberately NOT
-        // centered — it's pinned to the circle's actual bottom edge
-        // (radius + gap below that anchor), not the circle's center.
+        // driftsToCenter in IconItem). X is centered on the circle (-50% of
+        // the tooltip's own width). Y is deliberately NOT centered — it's
+        // pinned to the circle's edge (radius + gap away from that anchor),
+        // not the circle's center, and picks which edge (top vs bottom of
+        // the circle) from placement.vertical the same way the non-override
+        // path below does, so icons near the bottom of the page flip the
+        // tooltip above instead of pushing it off-screen. The trailing
+        // translateY(-100%) for "above" shifts by the tooltip's own
+        // rendered height (unknown here — it varies with blurb length), so
+        // it grows upward from that edge instead of downward from it.
         top: "50%",
         left: "50%",
-        transform: `translate(calc(-50% + ${circleOverride.shift.x}px), ${circleOverride.shift.y + circleOverride.size / 2 + 12}px)`,
+        transform:
+          placement.vertical === "below"
+            ? `translate(calc(-50% + ${circleOverride.shift.x}px), ${circleOverride.shift.y + circleOverride.size / 2 + 12}px)`
+            : `translate(calc(-50% + ${circleOverride.shift.x}px), ${circleOverride.shift.y - circleOverride.size / 2 - 12}px) translateY(-100%)`,
       }
     : {
         transform: `translate(calc(${placement.horizontal === "center" ? "-50%" : "0px"} + ${shift.x}px), ${shift.y}px)`,
@@ -310,6 +335,7 @@ function IconItem({
   const [hoverSize, setHoverSize] = useState<number | null>(null);
   const [hoverScale, setHoverScale] = useState<number | null>(null);
   const [hoverShift, setHoverShift] = useState({ x: 0, y: 0 });
+  const [tooltipShiftX, setTooltipShiftX] = useState(0);
 
   // Size the hover-media circle the same everywhere (so e.g. sunglasses
   // isn't noticeably smaller than the others just for sitting near a
@@ -368,6 +394,14 @@ function IconItem({
     const clampedCenterX = clamp(desiredCenterX, margin + size / 2, stageRect.width - margin - size / 2);
     const clampedCenterY = clamp(desiredCenterY, margin + size / 2, stageRect.height - margin - size / 2);
 
+    // The tooltip card (w-56, 224px) can be wider than the circle itself
+    // for smaller icons, so centering it on the circle's position can
+    // still overflow the stage even though the circle's own clamp above
+    // keeps *it* on-screen — clamp the tooltip's horizontal center
+    // independently against its own known width.
+    const TOOLTIP_WIDTH = 224;
+    const tooltipCenterX = clamp(clampedCenterX, margin + TOOLTIP_WIDTH / 2, stageRect.width - margin - TOOLTIP_WIDTH / 2);
+
     setHoverSize(size);
     // Animating width/height directly forces a layout reflow every frame —
     // fine-ish for a video (its own motion masks the stutter) but visibly
@@ -376,6 +410,7 @@ function IconItem({
     // a transform, so the browser can composite it on the GPU.
     setHoverScale(size / iconRect.width);
     setHoverShift({ x: clampedCenterX - centerX, y: clampedCenterY - centerY });
+    setTooltipShiftX(tooltipCenterX - centerX);
   }, [isActive, hasHoverMedia, stageRef, icon.discoOnHover]);
 
   useEffect(() => {
@@ -516,8 +551,12 @@ function IconItem({
             // scaled via transform now, for smoothness — see hoverScale
             // above), so the old top-full/bottom-full CSS anchoring, which
             // relied on that box matching the visual size, no longer holds
-            // for any hover-media icon, not just the disco one.
-            circleOverride={hasHoverMedia && hoverSize ? { size: hoverSize, shift: hoverShift } : undefined}
+            // for any hover-media icon, not just the disco one. X uses its
+            // own clamp (tooltipShiftX) since the tooltip card can be wider
+            // than the circle and overflow even when the circle doesn't.
+            circleOverride={
+              hasHoverMedia && hoverSize ? { size: hoverSize, shift: { x: tooltipShiftX, y: hoverShift.y } } : undefined
+            }
           />
         )}
         {revealing && <Confetti />}
