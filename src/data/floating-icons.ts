@@ -113,7 +113,7 @@ export const floatingIcons: FloatingIconData[] = [
     file: "poster.webp",
     alt: "Ted Lasso BELIEVE poster",
     title: "Believe",
-    blurb: "One of the first shows we watched together was Ted Lasso. Many people say Jon is the Asian Ted Lasso.",
+    blurb: "One of the first shows we watched together was Ted Lasso. People say Jon is the Asian Ted Lasso.",
     size: 2,
   },
   {

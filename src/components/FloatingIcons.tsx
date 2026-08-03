@@ -62,11 +62,6 @@ const sizeClasses = [
   "h-[7.5rem] w-[7.5rem] sm:h-[8.5rem] sm:w-[8.5rem]",
 ];
 
-// Actual box size (not a CSS transform) so the tooltip, which anchors to
-// this element's real edges via top-full/bottom-full, clears the enlarged
-// hover media instead of overlapping it.
-const hoverMediaSizeClasses = "h-[12rem] w-[12rem] sm:h-[15rem] sm:w-[15rem]";
-
 function HoverVideo({ src }: { src: string }) {
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -313,6 +308,7 @@ function IconItem({
   // shows the enlarged, drifted video instead.
   const driftsToCenter = Boolean(icon.discoOnHover);
   const [hoverSize, setHoverSize] = useState<number | null>(null);
+  const [hoverScale, setHoverScale] = useState<number | null>(null);
   const [hoverShift, setHoverShift] = useState({ x: 0, y: 0 });
 
   // Size the hover-media circle the same everywhere (so e.g. sunglasses
@@ -373,6 +369,12 @@ function IconItem({
     const clampedCenterY = clamp(desiredCenterY, margin + size / 2, stageRect.height - margin - size / 2);
 
     setHoverSize(size);
+    // Animating width/height directly forces a layout reflow every frame —
+    // fine-ish for a video (its own motion masks the stutter) but visibly
+    // choppy for a static image, which is all people are looking at. Scale
+    // up from the icon's current (pre-hover) rendered size instead: purely
+    // a transform, so the browser can composite it on the GPU.
+    setHoverScale(size / iconRect.width);
     setHoverShift({ x: clampedCenterX - centerX, y: clampedCenterY - centerY });
   }, [isActive, hasHoverMedia, stageRef, icon.discoOnHover]);
 
@@ -472,15 +474,16 @@ function IconItem({
               // it again. Always activating keeps a tap idempotent.
               onClick={icon.special ? triggerSpecialReveal : onActivate}
               style={
-                isActive && hasHoverMedia && !driftsToCenter && hoverSize
-                  ? { width: hoverSize, height: hoverSize, transform: `translate(${hoverShift.x}px, ${hoverShift.y}px)` }
+                isActive && hasHoverMedia && !driftsToCenter && hoverScale
+                  ? // Tailwind's hover:scale-110 sets the independent CSS
+                    // `scale` property (not the `transform` property it
+                    // used to compose into pre-v4), so it composes with —
+                    // rather than getting overridden by — our own
+                    // transform below unless explicitly reset here.
+                    { transform: `translate(${hoverShift.x}px, ${hoverShift.y}px) scale(${hoverScale})`, scale: "1" }
                   : undefined
               }
-              className={`${
-                isActive && hasHoverMedia && !driftsToCenter
-                  ? hoverMediaSizeClasses
-                  : `${sizeClasses[icon.size]} hover:scale-110 focus:scale-110`
-              } cursor-pointer rounded-full transition-all duration-300 ease-out focus:outline-none`}
+              className={`${sizeClasses[icon.size]} hover:scale-110 focus:scale-110 cursor-pointer rounded-full transition-transform duration-300 ease-out focus:outline-none`}
             >
               <IconGlyph
                 file={icon.file}
@@ -509,7 +512,12 @@ function IconItem({
             icon={icon}
             placement={placement}
             shift={hoverShift}
-            circleOverride={driftsToCenter && hoverSize ? { size: hoverSize, shift: hoverShift } : undefined}
+            // The button no longer changes its own layout box size (it's
+            // scaled via transform now, for smoothness — see hoverScale
+            // above), so the old top-full/bottom-full CSS anchoring, which
+            // relied on that box matching the visual size, no longer holds
+            // for any hover-media icon, not just the disco one.
+            circleOverride={hasHoverMedia && hoverSize ? { size: hoverSize, shift: hoverShift } : undefined}
           />
         )}
         {revealing && <Confetti />}
@@ -678,7 +686,7 @@ function SpecialReveal({ icon, onClose }: { icon: FloatingIconData; onClose: () 
       onClick={requestClose}
     >
       <FloatingFlowers />
-      <audio ref={audioRef} src="/the-white-lotus-hbo.mp3" />
+      <audio ref={audioRef} src="/keep-it-comin-love.mp3" />
       <div
         className={`relative z-10 max-h-[90vh] max-w-[90vw] transition-all duration-300 ease-out ${
           visible ? "scale-100 opacity-100" : "scale-90 opacity-0"
