@@ -351,8 +351,13 @@ function IconItem({
     const visibleTop = Math.max(0, -stageRect.top);
     const visibleBottom = Math.min(stageRect.height, window.innerHeight - stageRect.top);
 
+    // The tooltip hangs below the circle with nothing to balance it above,
+    // so centering the circle alone reads as sitting above true center —
+    // nudge the target up by roughly half the tooltip's height so the
+    // circle+tooltip combination is what actually looks centered.
+    const TOOLTIP_VISUAL_WEIGHT = 50;
     const desiredCenterX = icon.discoOnHover ? (visibleLeft + visibleRight) / 2 : centerX;
-    const desiredCenterY = icon.discoOnHover ? (visibleTop + visibleBottom) / 2 : centerY;
+    const desiredCenterY = icon.discoOnHover ? (visibleTop + visibleBottom) / 2 - TOOLTIP_VISUAL_WEIGHT : centerY;
 
     const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
     const clampedCenterX = clamp(desiredCenterX, margin + size / 2, stageRect.width - margin - size / 2);
